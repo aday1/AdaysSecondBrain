@@ -1,0 +1,25 @@
+#!/bin/bash
+
+echo "Initializing database..."
+
+# Remove existing database and migrations
+rm -f instance/pkm.db
+rm -rf migrations/
+
+# Create the database directory if it doesn't exist
+mkdir -p instance
+
+# Show the SQL commands being executed
+echo "Executing init.sql:"
+cat init.sql
+
+echo "Creating database:"
+cat init.sql | sqlite3 -echo instance/pkm.db
+
+echo "Verifying table schema:"
+sqlite3 instance/pkm.db ".schema anxiety_logs"
+
+echo "Verifying table columns:"
+sqlite3 instance/pkm.db "PRAGMA table_info(anxiety_logs);"
+
+echo "Database initialized successfully!"

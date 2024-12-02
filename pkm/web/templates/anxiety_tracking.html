@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anxiety Tracking</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        body[data-bs-theme="dark"] {
+            background-color: #212529;
+            color: #f8f9fa;
+        }
+        .resource-box {
+            border: 1px solid #007bff;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            background-color: #343a40; /* Dark mode background */
+            color: #f8f9fa; /* Dark mode text color */
+        }
+        .slider-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            background-color: #495057; /* Dark mode background */
+        }
+        .form-control, .form-range {
+            background-color: #343a40; /* Dark mode input background */
+            color: #f8f9fa; /* Dark mode input text color */
+        }
+        .form-control:focus, .form-range:focus {
+            border-color: #007bff; /* Focus border color */
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25); /* Focus shadow */
+        }
+        .form-select {
+            background-color: #343a40; /* Dark mode dropdown background */
+            color: #f8f9fa; /* Dark mode dropdown text color */
+        }
+        .form-select:focus {
+            border-color: #007bff; /* Focus border color */
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25); /* Focus shadow */
+        }
+        .chart-container {
+            background-color: #343a40;
+            border-radius: 5px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            min-height: 400px;
+            position: relative;
+        }
+
+        #anxietyChart, #copingChart {
+            width: 100% !important;
+            height: 400px !important;
+            position: relative;
+        }
+
+        /* Dark theme chart styles */
+        [data-bs-theme="dark"] .chart-container {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment"></script>
+</head>
+<body>
+    {% extends 'base.html' %}
+    {% block content %}
+    <div class="container">
+        <h1>Anxiety Tracking</h1>
+        <form id="anxietyForm" class="row">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Core Metrics</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Date & Time</label>
+                            <div class="input-group">
+                                <input type="date" class="form-control" id="date" required>
+                                <input type="time" class="form-control" id="timeStarted" required>
+                                <button type="button" class="btn btn-secondary" id="syncToNow">
+                                    <i class="fas fa-sync"></i> Sync to Now
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="sudsScore" class="form-label">SUDS Score (1-10)</label>
+                            <input type="range" class="form-range" id="sudsScore" min="1" max="10" value="1" required>
+                            <div id="sudsScoreDisplay" class="text-center">1 😊</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="durationMinutes" class="form-label">Duration</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="durationMinutes" min="1" required value="5">
+                                <span class="input-group-text">minutes</span>
+                            </div>
+                            <small class="form-text text-muted">
+                                Short: 1-15 min | Medium: 15-60 min | Long: > 60 min
+                            </small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="trigger" class="form-label">Trigger</label>
+                            <div class="input-group">
+                                <select class="form-select" id="trigger" name="trigger">
+                                    <option value="">Select Trigger</option>
+                                    <option value="new">+ Add New Trigger</option>
+                                </select>
+                            </div>
+                            <div class="collapse mt-2" id="newTriggerCollapse">
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="new_trigger_input" placeholder="Enter new trigger name">
+                                    <button class="btn btn-outline-primary" type="button" id="confirmTriggerBtn">Save</button>
+                                    <button class="btn btn-outline-secondary" type="button" id="cancelTriggerBtn">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3 d-none" id="new-trigger-input">
+                            <label for="new_trigger_input" class="form-label">New Trigger Name</label>
+                            <input type="text" class="form-control" id="new_trigger_input" name="new_trigger_input">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Anxiety Factors & Coping</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="anxiety-factors mb-4">
+                            <div class="mb-3">
+                                <label for="socialIsolation" class="form-label">
+                                    Social Isolation / Alienation (SI)
+                                    <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                       title="Feeling isolated from others or not part of any group"></i>
+                                </label>
+                                <input type="range" class="form-range" id="socialIsolation" min="0" max="10" value="0">
+                                <div id="socialIsolationDisplay" class="text-center">0 😊</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="insufficientSelfControl" class="form-label">
+                                    Insufficient Self-Control (IS)
+                                    <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                       title="Difficulty exercising self-control to achieve personal goals"></i>
+                                </label>
+                                <input type="range" class="form-range" id="insufficientSelfControl" min="0" max="10" value="0">
+                                <div id="insufficientSelfControlDisplay" class="text-center">0 😊</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="subjugation" class="form-label">
+                                    Subjugation (SB)
+                                    <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                       title="Excessive surrendering of control to others"></i>
+                                </label>
+                                <input type="range" class="form-range" id="subjugation" min="0" max="10" value="0">
+                                <div id="subjugationDisplay" class="text-center">0 😊</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="negativity" class="form-label">
+                                    Negativity / Pessimism (NP)
+                                    <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                       title="Focus on negative aspects while minimizing positive ones"></i>
+                                </label>
+                                <input type="range" class="form-range" id="negativity" min="0" max="10" value="0">
+                                <div id="negativityDisplay" class="text-center">0 😊</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="unrelentingStandards" class="form-label">
+                                    Unrelenting Standards (US)
+                                    <i class="fas fa-info-circle" data-bs-toggle="tooltip" 
+                                       title="Striving to meet excessively high standards"></i>
+                                </label>
+                                <input type="range" class="form-range" id="unrelentingStandards" min="0" max="10" value="0">
+                                <div id="unrelentingStandardsDisplay" class="text-center">0 😊</div>
+                            </div>
+                        </div>
+                        <div class="coping-strategy">
+                            <div class="mb-3">
+                                <label for="copingStrategy" class="form-label">Coping Strategy</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="copingStrategy" name="copingStrategy" required>
+                                        <option value="">Select Strategy</option>
+                                        <option value="new">+ Add New Strategy</option>
+                                    </select>
+                                </div>
+                                <div class="collapse mt-2" id="newStrategyCollapse">
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="new_strategy_input" placeholder="Enter new strategy name">
+                                        <button class="btn btn-outline-primary" type="button" id="confirmStrategyBtn">Save</button>
+                                        <button class="btn btn-outline-secondary" type="button" id="cancelStrategyBtn">Cancel</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3 d-none" id="new-strategy-input">
+                                <label for="new_strategy_input" class="form-label">New Strategy Name</label>
+                                <input type="text" class="form-control" id="new_strategy_input" name="new_strategy_input">
+                            </div>
+                            <div class="mb-3">
+                                <label for="effectiveness" class="form-label">Strategy Effectiveness (1-10)</label>
+                                <input type="range" class="form-range" id="effectiveness" min="1" max="10" value="1" required>
+                                <div id="effectivenessDisplay" class="text-center">1 😊</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="notes" class="form-label">Notes</label>
+                                <textarea class="form-control" id="notes" rows="3" 
+                                        placeholder="Add any additional context, observations, or thoughts..."></textarea>
+                            </div>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">Save Anxiety Log</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+        <h2 class="mt-5">Anxiety Graph</h2>
+        <div class="row mt-5">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Anxiety Metrics Over Time</h5>
+                    </div>
+                    <div class="card-body chart-container">
+                        <div id="anxietyChart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Coping Strategies Effectiveness</h5>
+                    </div>
+                    <div class="card-body chart-container">
+                        <div id="copingChart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <h2 class="mt-5">Logged Anxieties</h2>
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Date/Time</th>
+                                <th>SUDS</th>
+                                <th>Duration</th>
+                                <th>Social Isolation</th>
+                                <th>Self Control</th>
+                                <th>Subjugation</th>
+                                <th>Negativity</th>
+                                <th>Trigger</th>
+                                <th>Strategy</th>
+                                <th>Effectiveness</th>
+                            </tr>
+                        </thead>
+                        <tbody id="anxietyLogsTableBody">
+                            <!-- Logs will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <h2 class="mt-5">Strategies for Managing Anxiety</h2>
+        <div class="resource-box">
+            <h5 class="mb-3">Cognitive Strategies (SUDS 1-4)</h5>
+            <ul>
+                <li><strong>1/10 – Mild Concern:</strong> Practice mindful observation, identify and name the feeling</li>
+                <li><strong>2/10 - Rising Awareness:</strong> Use thought recording, challenge any cognitive distortions</li>
+                <li><strong>3/10 – Growing Tension:</strong> Apply rational self-talk, use problem-solving techniques</li>
+                <li><strong>4/10 – Increasing Worry:</strong> Practice acceptance strategies, use worry postponement</li>
+            </ul>
+            <h5 class="mb-3">Physical Interventions (SUDS 5-10)</h5>
+            <ul>
+                <li><strong>5/10 – Body Activation:</strong> Start deep breathing exercises (4-7-8 breathing pattern)</li>
+                <li><strong>6/10 - Physical Tension:</strong> Progressive muscle relaxation, grounding exercises</li>
+                <li><strong>7/10 – Strong Physical:</strong> Cold exposure (face/hands), vigorous exercise</li>
+                <li><strong>8/10 – Intense Anxiety:</strong> Bilateral stimulation, rhythmic movement, cold shower</li>
+                <li><strong>9/10 – Near Panic:</strong> Safe space retreat, emergency breathing kit, crisis contacts</li>
+                <li><strong>10/10 – Panic Attack:</strong> Emergency response plan, medication if prescribed, immediate support person</li>
+            </ul>
+            <div class="alert alert-info mt-3">
+                <strong>Remember:</strong> 
+                <ul>
+                    <li>Below SUDS 5: Focus on thought patterns and cognitive restructuring</li>
+                    <li>Above SUDS 5: Prioritize physical interventions to regulate nervous system</li>
+                    <li>Always start with breathing regardless of level</li>
+                    <li>Document what works best for you at each level</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="newTriggerModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Trigger</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="newTriggerForm">
+                        <div class="mb-3">
+                            <label for="triggerName" class="form-label">Trigger Name</label>
+                            <input type="text" class="form-control" id="triggerName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="triggerCategory" class="form-label">Category</label>
+                            <input type="text" class="form-control" id="triggerCategory">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveTriggerBtn">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="newStrategyModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Coping Strategy</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="newStrategyForm">
+                        <div class="mb-3">
+                            <label for="strategyName" class="form-label">Strategy Name</label>
+                            <input type="text" class="form-control" id="strategyName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="strategyDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="strategyDescription" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="strategyCategory" class="form-label">Category</label>
+                            <input type="text" class="form-control" id="strategyCategory">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveStrategyBtn">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Utility functions
+    function getEmojiForScore(score) {
+        if (score >= 8) return '😱';
+        if (score >= 6) return '😟';
+        if (score >= 4) return '😐';
+        return '😊';
+    }
+
+    // Form element references
+    const dateInput = document.getElementById('date');
+    const timeInput = document.getElementById('timeStarted');
+    const syncButton = document.getElementById('syncToNow');
+    const triggerSelect = document.getElementById('trigger');
+    const strategySelect = document.getElementById('copingStrategy');
+    const anxietyForm = document.getElementById('anxietyForm');
+
+    // Time sync functionality
+    async function syncDateTime() {
+        try {
+            const response = await fetch('/get_current_datetime');
+            const data = await response.json();
+            
+            if (!response.ok) throw new Error(data.error || 'Failed to get current time');
+            
+            dateInput.value = data.date;
+            timeInput.value = data.time;
+        } catch (error) {
+            console.error('Error syncing time:', error);
+            alert('Error syncing time: ' + error.message);
+        }
+    }
+
+    // Trigger/Strategy Management
+    async function loadTriggersAndStrategies() {
+        try {
+            const [triggersRes, strategiesRes] = await Promise.all([
+                fetch('/get_anxiety_triggers'),
+                fetch('/get_coping_strategies')
+            ]);
+
+            const triggers = await triggersRes.json();
+            const strategies = await strategiesRes.json();
+
+            // Update trigger dropdown
+            if (triggerSelect) {
+                triggerSelect.innerHTML = `
+                    <option value="">Select Trigger</option>
+                    ${triggers.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+                    <option value="new">+ Add New Trigger</option>
+                `;
+            }
+
+            // Update strategy dropdown
+            if (strategySelect) {
+                strategySelect.innerHTML = `
+                    <option value="">Select Strategy</option>
+                    ${strategies.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                    <option value="new">+ Add New Strategy</option>
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading triggers/strategies:', error);
+        }
+    }
+
+    // Add new trigger handler
+    async function handleNewTrigger(name) {
+        try {
+            const response = await fetch('/add_anxiety_trigger', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name.trim() })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to add trigger');
+            }
+
+            const result = await response.json();
+            await loadTriggersAndStrategies();
+            triggerSelect.value = result.trigger.id;
+            return true;
+        } catch (error) {
+            alert('Error adding trigger: ' + error.message);
+            return false;
+        }
+    }
+
+    // Add new strategy handler
+    async function handleNewStrategy(name) {
+        try {
+            const response = await fetch('/add_coping_strategy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name.trim() })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to add strategy');
+            }
+
+            const result = await response.json();
+            await loadTriggersAndStrategies();
+            strategySelect.value = result.strategy.id;
+            return true;
+        } catch (error) {
+            alert('Error adding strategy: ' + error.message);
+            return false;
+        }
+    }
+
+    // Event Listeners
+    if (syncButton) {
+        syncButton.addEventListener('click', syncDateTime);
+    }
+
+    if (triggerSelect) {
+        triggerSelect.addEventListener('change', async function() {
+            if (this.value === 'new') {
+                const name = prompt('Enter new trigger name:');
+                if (name) {
+                    await handleNewTrigger(name);
+                } else {
+                    this.value = '';
+                }
+            }
+        });
+    }
+
+    if (strategySelect) {
+        strategySelect.addEventListener('change', async function() {
+            if (this.value === 'new') {
+                const name = prompt('Enter new strategy name:');
+                if (name) {
+                    await handleNewStrategy(name);
+                } else {
+                    this.value = '';
+                }
+            }
+        });
+    }
+
+    // Form submission handler
+    if (anxietyForm) {
+        anxietyForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            const formData = {
+                date: dateInput.value,
+                timeStarted: timeInput.value,
+                durationMinutes: parseInt(document.getElementById('durationMinutes').value),
+                sudsScore: parseInt(document.getElementById('sudsScore').value),
+                socialIsolation: parseInt(document.getElementById('socialIsolation').value),
+                insufficientSelfControl: parseInt(document.getElementById('insufficientSelfControl').value),
+                subjugation: parseInt(document.getElementById('subjugation').value),
+                negativity: parseInt(document.getElementById('negativity').value),
+                unrelentingStandards: parseInt(document.getElementById('unrelentingStandards').value),
+                trigger: triggerSelect.value,
+                copingStrategy: strategySelect.value,
+                effectiveness: parseInt(document.getElementById('effectiveness').value),
+                notes: document.getElementById('notes').value
+            };
+
+            try {
+                const response = await fetch('/save_anxiety_data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Failed to save data');
+
+                alert('Anxiety data saved successfully!');
+                anxietyForm.reset();
+                await updateData();
+            } catch (error) {
+                console.error('Error saving data:', error);
+                alert('Error saving data: ' + error.message);
+            }
+        });
+    }
+
+    // Initialize
+    syncDateTime(); // Set current date/time on load
+    loadTriggersAndStrategies(); // Load dropdown options
+    
+    // Initialize charts
+    const anxietyChartCtx = document.getElementById('anxietyChart').getContext('2d');
+    const copingChartCtx = document.getElementById('copingChart').getContext('2d');
+
+    let anxietyChart, copingChart;
+
+    function updateData() {
+        fetch('/get_anxiety_data')
+            .then(response => response.json())
+            .then(data => {
+                if (anxietyChart) {
+                    anxietyChart.data.labels = data.timestamps;
+                    anxietyChart.data.datasets[0].data = data.suds;
+                    anxietyChart.data.datasets[1].data = data.social;
+                    anxietyChart.data.datasets[2].data = data.control;
+                    anxietyChart.data.datasets[3].data = data.subjugation;
+                    anxietyChart.data.datasets[4].data = data.negativity;
+                    anxietyChart.data.datasets[5].data = data.standards;
+                    anxietyChart.update();
+                } else {
+                    anxietyChart = new Chart(anxietyChartCtx, {
+                        type: 'line',
+                        data: {
+                            labels: data.timestamps,
+                            datasets: [
+                                {
+                                    label: 'SUDS',
+                                    data: data.suds,
+                                    borderColor: '#FF6384',
+                                    fill: false
+                                },
+                                {
+                                    label: 'Social',
+                                    data: data.social,
+                                    borderColor: '#36A2EB',
+                                    fill: false
+                                },
+                                {
+                                    label: 'Control',
+                                    data: data.control,
+                                    borderColor: '#FFCE56',
+                                    fill: false
+                                },
+                                {
+                                    label: 'Subjugation',
+                                    data: data.subjugation,
+                                    borderColor: '#4BC0C0',
+                                    fill: false
+                                },
+                                {
+                                    label: 'Negativity',
+                                    data: data.negativity,
+                                    borderColor: '#9966FF',
+                                    fill: false
+                                },
+                                {
+                                    label: 'Standards',
+                                    data: data.standards,
+                                    borderColor: '#FF9F40',
+                                    fill: false
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            scales: {
+                                x: {
+                                    type: 'time',
+                                    time: {
+                                        unit: 'day'
+                                    }
+                                },
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                }
+
+                const copingData = data.logs.reduce((acc, log) => {
+                    if (!acc[log.strategy]) {
+                        acc[log.strategy] = {
+                            effectiveness: [],
+                            count: 0
+                        };
+                    }
+                    acc[log.strategy].effectiveness.push(log.effectiveness);
+                    acc[log.strategy].count++;
+                    return acc;
+                }, {});
+
+                const strategies = Object.keys(copingData);
+                if (copingChart) {
+                    copingChart.data.labels = strategies;
+                    copingChart.data.datasets[0].data = strategies.map(s => copingData[s].effectiveness.reduce((a, b) => a + b, 0) / copingData[s].count);
+                    copingChart.data.datasets[1].data = strategies.map(s => copingData[s].count);
+                    copingChart.update();
+                } else {
+                    copingChart = new Chart(copingChartCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: strategies,
+                            datasets: [
+                                {
+                                    label: 'Avg Effectiveness',
+                                    data: strategies.map(s => copingData[s].effectiveness.reduce((a, b) => a + b, 0) / copingData[s].count),
+                                    backgroundColor: '#5470c6'
+                                },
+                                {
+                                    label: 'Usage Count',
+                                    data: strategies.map(s => copingData[s].count),
+                                    backgroundColor: '#91cc75'
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                }
+            })
+            .catch(error => console.error('Error updating charts:', error));
+    }
+
+    updateData();
+    setInterval(updateData, 300000);
+
+    // Update slider emoji displays
+    document.querySelectorAll('.form-range').forEach(slider => {
+        const display = document.getElementById(slider.id + 'Display');
+        if (display) {
+            slider.addEventListener('input', function() {
+                display.textContent = this.value + ' ' + getEmojiForScore(this.value);
+            });
+        }
+    });
+
+    // Initial update
+    updateData();
+
+    // Update periodically
+    setInterval(updateData, 300000); // Update every 5 minutes
+});
+</script>
+    {% endblock %}
+</body>
+</html>

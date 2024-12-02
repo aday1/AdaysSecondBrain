@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Log Your Mood</h1>
+    <form method="POST" action="{{ url_for('log_sub_mood') }}">
+        <div class="mb-3">
+            <label for="mood_level" class="form-label">Mood Level (1-100)</label>
+            <input type="number" class="form-control" id="mood_level" name="mood_level" min="1" max="100" required>
+        </div>
+        <div class="mb-3">
+            <label for="energy_level" class="form-label">Energy Level (1-100)</label>
+            <input type="number" class="form-control" id="energy_level" name="energy_level" min="1" max="100" required>
+        </div>
+        <div class="mb-3">
+            <label for="activity" class="form-label">Activity</label>
+            <input type="text" class="form-control" id="activity" name="activity" placeholder="What were you doing?" required>
+        </div>
+        <div class="mb-3">
+            <label for="notes" class="form-label">Notes</label>
+            <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="mb-3">
+            <label for="mood_type" class="form-label">Mood Type</label>
+            <select class="form-control" id="mood_type" name="type" required>
+                <option value="general">General</option>
+                <option value="specific">Specific</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Log Mood</button>
+    </form>
+</div>
+{% endblock %}

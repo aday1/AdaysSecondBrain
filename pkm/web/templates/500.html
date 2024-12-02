@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>500 Internal Server Error</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f8f9fa;
+            color: #343a40;
+            font-family: Arial, sans-serif;
+        }
+        h1 {
+            font-size: 3rem;
+        }
+        p {
+            font-size: 1.25rem;
+        }
+        .quote {
+            margin-top: 20px;
+            font-style: italic;
+            color: #6c757d;
+        }
+        .error-message {
+            margin-top: 20px;
+            font-size: 1rem;
+            color: red;
+            white-space: pre-wrap; /* Preserve whitespace for stack trace */
+        }
+    </style>
+</head>
+<body>
+    <h1>500 Internal Server Error</h1>
+    <p>Something went wrong on our end. Please try again later.</p>
+    <p class="error-message">{{ error_message }}</p> <!-- Display the error message -->
+    <p><a href="/">Go back to the homepage</a></p>
+    <div class="quote">"Your vision will become clear only when you can look into your own heart. Who looks outside, dreams; who looks inside, awakens." - Carl Jung</div>
+</body>
+</html>

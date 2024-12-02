@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4">Medication Tracking</h1>
+
+    <!-- Add New Medication Form -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Add New Medication</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('add_medication') }}">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Medication Name</label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="dosage" class="form-label">Dosage</label>
+                            <input type="text" class="form-control" id="dosage" name="dosage" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="frequency" class="form-label">Frequency</label>
+                            <select class="form-control" id="frequency" name="frequency" required>
+                                <option value="daily">Daily</option>
+                                <option value="twice_daily">Twice Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="as_needed">As Needed</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="time_of_day" class="form-label">Time of Day</label>
+                            <input type="time" class="form-control" id="time_of_day" name="time_of_day" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="refill_date" class="form-label">Refill Script Due</label>
+                            <input type="date" class="form-control" id="refill_date" name="refill_date">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Medication</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Medications List -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Active Medications</h5>
+                </div>
+                <div class="card-body">
+                    {% if medications %}
+                        <div class="list-group">
+                            {% for med in medications %}
+                                <div class="list-group-item">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h5 class="mb-1">{{ med['name'] }}</h5>
+                                        <div class="text-end">
+                                            <small class="d-block">{{ med['frequency'] }}</small>
+                                            {% if med['refill_date'] %}
+                                                <small class="d-block text-danger">
+                                                    <i class="bi bi-prescription2"></i> 
+                                                    Refill Due: {{ med['refill_date'] }}
+                                                </small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <p class="mb-1">Dosage: {{ med['dosage'] }}</p>
+                                    <p class="mb-1">Time: {{ med['time_of_day'] }}</p>
+                                    {% if med['notes'] %}
+                                        <small>Notes: {{ med['notes'] }}</small>
+                                    {% endif %}
+                                    <div class="mt-2">
+                                        <form action="{{ url_for('log_medication') }}" method="POST" class="d-inline">
+                                            <input type="hidden" name="medication_id" value="{{ med['id'] }}">
+                                            <button type="submit" class="btn btn-success btn-sm">Mark as Taken</button>
+                                        </form>
+                                        <form action="{{ url_for('deactivate_medication') }}" method="POST" class="d-inline">
+                                            <input type="hidden" name="medication_id" value="{{ med['id'] }}">
+                                            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to remove this medication?')">Remove</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p>No active medications.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Medication History -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Medication History</h5>
+                </div>
+                <div class="card-body">
+                    {% if medication_logs %}
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Medication</th>
+                                        <th>Taken At</th>
+                                        <th>Notes</th>
+                                        <th>Refill Due</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for log in medication_logs %}
+                                        <tr>
+                                            <td>{{ log[1] }}</td>
+                                            <td>{{ log[0] }}</td>
+                                            <td>{{ log[2] if log[2] else '' }}</td>
+                                            <td>{{ log[3] if log[3] else '' }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p>No medication history available.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reminder Modal -->
+<div class="modal fade" id="medicationReminderModal" tabindex="-1" aria-labelledby="medicationReminderModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="medicationReminderModalLabel">Medication Reminder</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Time to take your medication: <span id="medicationName"></span></p>
+                <p>Dosage: <span id="medicationDosage"></span></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Dismiss</button>
+                <button type="button" class="btn btn-primary" id="markAsTakenBtn">Mark as Taken</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Check for medication reminders every minute
+setInterval(checkMedicationReminders, 60000);
+
+function checkMedicationReminders() {
+    fetch('/check_medication_reminders')
+        .then(response => response.json())
+        .then(data => {
+            if (data.reminder) {
+                showMedicationReminder(data.medication);
+            }
+        });
+}
+
+function showMedicationReminder(medication) {
+    document.getElementById('medicationName').textContent = medication.name;
+    document.getElementById('medicationDosage').textContent = medication.dosage;
+    
+    const modal = new bootstrap.Modal(document.getElementById('medicationReminderModal'));
+    modal.show();
+    
+    // Play notification sound
+    const audio = new Audio('/static/notification.mp3');
+    audio.play();
+}
+
+// Handle "Mark as Taken" button in reminder modal
+document.getElementById('markAsTakenBtn').addEventListener('click', function() {
+    const medicationName = document.getElementById('medicationName').textContent;
+    fetch('/log_medication', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            medication_name: medicationName,
+            taken: true
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        }
+    });
+});
+</script>
+{% endblock %}

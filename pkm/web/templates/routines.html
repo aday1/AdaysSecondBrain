@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Daily Routines</h1>
+
+    <!-- Add New Routine Form -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Add New Routine</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('routines') }}">
+                <div class="mb-3">
+                    <label for="routine_name" class="form-label">Routine Name</label>
+                    <input type="text" class="form-control" id="routine_name" name="routine_name" placeholder="Enter routine name" required>
+                </div>
+                <div class="mb-3">
+                    <label for="routine_time" class="form-label">Routine Time</label>
+                    <input type="time" class="form-control" id="routine_time" name="routine_time" required>
+                </div>
+                <div class="mb-3">
+                    <label for="routine_frequency" class="form-label">Routine Frequency</label>
+                    <select class="form-select" id="routine_frequency" name="routine_frequency" required>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="routine_day" class="form-label">Day of the Week</label>
+                    <select class="form-select" id="routine_day" name="routine_day" required>
+                        <option value="Monday">Monday</option>
+                        <option value="Tuesday">Tuesday</option>
+                        <option value="Wednesday">Wednesday</option>
+                        <option value="Thursday">Thursday</option>
+                        <option value="Friday">Friday</option>
+                        <option value="Saturday">Saturday</option>
+                        <option value="Sunday">Sunday</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Add Routine</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Routines List -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Your Routines</h5>
+        </div>
+        <div class="card-body">
+            {% if routines %}
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Time</th>
+                            <th>Frequency</th>
+                            <th>Day</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for routine in routines %}
+                        <tr>
+                            <td>{{ routine[1] }}</td>
+                            <td>{{ routine[2] }}</td>
+                            <td>{{ routine[3] }}</td>
+                            <td>{{ routine[4] }}</td>
+                            <td>
+                                {% if routine[5] == 'completed' %}
+                                <span class="badge bg-success">Completed</span>
+                                {% else %}
+                                <span class="badge bg-warning">Pending</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">
+                No routines found. Add your first routine using the form above.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

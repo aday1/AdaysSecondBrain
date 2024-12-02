@@ -1,0 +1,22 @@
+{
+    "web_enabled": true,
+    "username": "admin",
+    "password_hash": "scrypt:32768:8:1$lITaC9Mb4LYOdk6B$67702ee3dbb0931a64761a884379736ef27a34009749cd2e500ddde8931eef19510b5401f002da0bad8646091a5d9632b68a66f4113d745557ac44281af09b16",
+    "host": "0.0.0.0",
+    "port": 5054,
+    "title": "Adays Second Brain",
+    "secret_key": "d8e8fca2dc0f896fd7cb4cb0031ba249",
+    "ssl": {
+        "enabled": false,
+        "cert_path": "",
+        "key_path": ""
+    },
+    "session": {
+        "lifetime": 1440,
+        "permanent": true
+    },
+    "security": {
+        "max_attempts": 5,
+        "lockout_time": 300
+    }
+}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if log_type == 'daily' %}
+    <!-- Daily log editing section -->
+    <div class="container-fluid">
+        <h1 class="mb-4">Edit Log - {{ date|format_date }}</h1>
+
+        <div id="sortable-container">
+            <div class="sortable-item mb-4" data-id="edit-log-section">
+                <div class="card">
+                    <div class="card-header grabbable">
+                        <h5 class="card-title mb-0">Edit Content</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            <div class="form-group mb-3">
+                                <textarea name="content" id="content" class="form-control markdown-editor" rows="20">{{ content }}</textarea>
+                            </div>
+                            <div class="form-group">
+                                <button type="submit" class="btn btn-primary w-100">Save Changes</button>
+                                <a href="{{ url_for('daily_logs') }}" class="btn btn-secondary w-100">Cancel</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <!-- Gratitude editing section -->
+    <div class="container-fluid">
+        <h1 class="mb-4">Edit Gratitude Entry</h1>
+
+        <form action="{{ url_for('edit_gratitude', id=id) }}" method="POST">
+            <div class="mb-3">
+                <label for="gratitude_content" class="form-label">What are you grateful for?</label>
+                <textarea class="form-control" id="gratitude_content" name="gratitude_content" rows="3" required>{{ content }}</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ url_for('gratitude') }}" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Habits</h1>
+
+    <!-- Add New Habit Form -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Add New Habit</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('add_habit') }}">
+                <div class="mb-3">
+                    <label class="form-label">Select Habit Type</label>
+                    <select class="form-select" id="existing_habit" name="existing_habit" onchange="toggleHabitInput()">
+                        <option value="new">Add New Habit</option>
+                        {% for habit in habits %}
+                            <option value="{{ habit.name }}">{{ habit.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div id="new_habit_input" class="mb-3">
+                    <label class="form-label">New Habit Name</label>
+                    <input type="text" class="form-control" name="habit" placeholder="Enter habit name">
+                </div>
+                <div class="mb-3">
+                    <label for="frequency" class="form-label">Frequency</label>
+                    <select class="form-select" id="frequency" name="frequency" required>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="notes" class="form-label">Notes</label>
+                    <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Add Habit</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Habits List -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Your Habits</h5>
+        </div>
+        <div class="card-body">
+            {% if processed_habits_data %}
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Frequency</th>
+                                <th>Description</th>
+                                <th>Streak</th>
+                                <th>Weekly Progress</th>
+                                <th>Monthly Progress</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for habit in processed_habits_data %}
+                            <tr>
+                                <td>{{ habit.name }}</td>
+                                <td>{{ habit.frequency }}</td>
+                                <td>{{ habit.description }}</td>
+                                <td>{{ habit.streak }}</td>
+                                <td>
+                                    <div class="progress">
+                                        <div class="progress-bar" role="progressbar" 
+                                             style="width: {{ habit.week_rate }}%" 
+                                             aria-valuenow="{{ habit.week_rate }}" 
+                                             aria-valuemin="0" 
+                                             aria-valuemax="100">
+                                            {{ habit.week_rate }}%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="progress">
+                                        <div class="progress-bar" role="progressbar" 
+                                             style="width: {{ habit.month_rate }}%" 
+                                             aria-valuenow="{{ habit.month_rate }}" 
+                                             aria-valuemin="0" 
+                                             aria-valuemax="100">
+                                            {{ habit.month_rate }}%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('mark_complete', habit_name=habit.name) }}" class="d-inline">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" 
+                                                   name="completed" 
+                                                   onchange="this.form.submit()" 
+                                                   {% if habit.today_complete %}checked{% endif %}>
+                                        </div>
+                                    </form>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-danger">Delete</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>No habits found. Add your first habit using the form above.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Streak Graph -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Weekly Completion History</h5>
+        </div>
+        <div class="card-body">
+            <canvas id="streakChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const existingHabitSelect = document.getElementById('existing-habit');
+    const newHabitInput = document.getElementById('new-habit-input');
+    const newHabitField = document.getElementById('habit');
+    
+    existingHabitSelect.addEventListener('change', function() {
+        if (this.value === 'new') {
+            newHabitInput.classList.remove('d-none');
+            newHabitField.required = true;
+            newHabitField.focus();
+        } else {
+            newHabitInput.classList.add('d-none');
+            newHabitField.required = false;
+            newHabitField.value = '';
+        }
+    });
+
+    // Form validation
+    const form = document.querySelector('form');
+    form.addEventListener('submit', function(e) {
+        if (existingHabitSelect.value === 'new' && !newHabitField.value.trim()) {
+            e.preventDefault();
+            alert('Please enter a name for the new habit');
+            newHabitField.focus();
+        }
+    });
+
+    // Initialize tooltips
+    const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    tooltips.forEach(tooltip => new bootstrap.Tooltip(tooltip));
+
+    // Streak Chart
+    const ctx = document.getElementById('streakChart').getContext('2d');
+    const streakChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: [],
+            datasets: []
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const habit = context.dataset.label;
+                            const date = context.label;
+                            const completed = context.raw === 1;
+                            return `${habit}: ${completed ? 'Completed' : 'Not completed'} on ${date}`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    function updateChart() {
+        fetch('/get_habits_data')
+            .then(response => response.json())
+            .then(data => {
+                streakChart.data.labels = data.dates;
+                streakChart.data.datasets = data.datasets.map(dataset => ({
+                    label: dataset.label,
+                    data: dataset.data,
+                    backgroundColor: dataset.data.map(value => value ? 'rgba(40, 167, 69, 0.6)' : 'rgba(0, 0, 0, 0.1)'),
+                    borderColor: 'rgba(0, 0, 0, 0.1)',
+                    borderWidth: 1
+                }));
+                streakChart.update();
+            })
+            .catch(error => console.error('Error updating chart:', error));
+    }
+
+    updateChart();
+    setInterval(updateChart, 300000);
+});
+
+function toggleHabitInput() {
+    const selection = document.getElementById('existing_habit').value;
+    const newHabitInput = document.getElementById('new_habit_input');
+    newHabitInput.style.display = selection === 'new' ? 'block' : 'none';
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', toggleHabitInput);
+</script>
+{% endblock %}

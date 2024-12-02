@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Add date navigation controls -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Dashboard</h1>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" onclick="navigateDate('prev')">&lt;</button>
+            <div class="d-flex gap-2 align-items-center">
+                <select id="dateRange" class="form-select" onchange="updateDateRange()">
+                    <option value="day">Day</option>
+                    <option value="week">Week</option>
+                    <option value="month">Month</option>
+                    <option value="year">Year</option>
+                </select>
+                <input type="date" id="selectedDate" class="form-control" value="{{ selected_date }}" onchange="updateDashboard()">
+                <button class="btn btn-primary" onclick="syncToNow()">Now</button>
+            </div>
+            <button class="btn btn-outline-secondary" onclick="navigateDate('next')">&gt;</button>
+        </div>
+    </div>
+
+    <h1 class="mb-4">Dashboard</h1>
+    
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <div id="overviewChart" style="width: 100%; height: 350px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <div id="eGraph" style="width: 100%; height: 350px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard Metrics -->
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Sleep Data</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Sleep Hours:</strong> {{ sleep_hours }}</p>
+                    <p><strong>Sleep Quality:</strong> {{ sleep_quality }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Mood and Energy</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Average Mood:</strong> {{ avg_mood }}</p>
+                    <p><strong>Average Energy:</strong> {{ avg_energy }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Work Hours</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Work Hours:</strong> {{ work_hours }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-12">
+            <h2>Daily Logs</h2>
+            <div class="card">
+                <div class="card-body">
+                    {% for log in logs %}
+                    <div class="log-entry mb-3">
+                        <h5 class="mb-1">{{ log.date }}</h5>
+                        <div class="log-content">{{ log.content|safe }}</div>
+                    </div>
+                    {% else %}
+                    <p>No daily logs available.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid">
+    <h1 class="mb-4">Dashboard</h1>
+    <div class="row">
+        <!-- Mood & Energy Card -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Today's Mood & Energy</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6 text-center">
+                            <h3>Mood</h3>
+                            <div class="display-4">{{ stats.mood }}/10</div>
+                        </div>
+                        <div class="col-6 text-center">
+                            <h3>Energy</h3>
+                            <div class="display-4">{{ stats.energy }}/10</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sleep Card -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Sleep</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h3>Hours Slept</h3>
+                    <div class="display-4">{{ stats.sleep_hours }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Work Hours Card -->
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Work</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h3>Hours Worked</h3>
+                    <div class="display-4">{{ stats.work_hours }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Habits Card -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Habits Progress</h5>
+                </div>
+                <div class="card-body">
+                    <h3 class="text-center mb-3">{{ stats.habits_completed }}/{{ stats.total_habits }} Completed</h3>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar" role="progressbar" 
+                             style="width: {{ (stats.habits_completed / stats.total_habits * 100) if stats.total_habits > 0 else 0 }}%;"
+                             aria-valuenow="{{ stats.habits_completed }}"
+                             aria-valuemin="0"
+                             aria-valuemax="{{ stats.total_habits }}">
+                            {% if stats.total_habits > 0 %}
+                                {{ (stats.habits_completed / stats.total_habits * 100) | round }}%
+                            {% else %}
+                                No habits
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+let currentRange = 'day';
+
+function syncToNow() {
+    document.getElementById('selectedDate').value = new Date().toISOString().split('T')[0];
+    updateDashboard();
+}
+
+function updateDateRange() {
+    currentRange = document.getElementById('dateRange').value;
+    updateDashboard();
+}
+
+function navigateDate(direction) {
+    const dateInput = document.getElementById('selectedDate');
+    const currentDate = new Date(dateInput.value);
+    
+    switch(currentRange) {
+        case 'day':
+            currentDate.setDate(currentDate.getDate() + (direction === 'next' ? 1 : -1));
+            break;
+        case 'week':
+            currentDate.setDate(currentDate.getDate() + (direction === 'next' ? 7 : -7));
+            break;
+        case 'month':
+            currentDate.setMonth(currentDate.getMonth() + (direction === 'next' ? 1 : -1));
+            break;
+        case 'year':
+            currentDate.setFullYear(currentDate.getFullYear() + (direction === 'next' ? 1 : -1));
+            break;
+    }
+    
+    dateInput.value = currentDate.toISOString().split('T')[0];
+    updateDashboard();
+}
+
+function updateDashboard() {
+    const date = document.getElementById('selectedDate').value;
+    const range = document.getElementById('dateRange').value;
+    window.location.href = `/dashboard?date=${date}&range=${range}`;
+}
+
+// Initialize with current date if none selected
+if (!document.getElementById('selectedDate').value) {
+    syncToNow();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var ctx = document.getElementById('overviewChart').getContext('2d');
+    var overviewChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ dates|default([])|tojson|safe }},
+            datasets: [
+                {
+                    label: 'Mood Level',
+                    data: {{ moods|default([])|tojson|safe }},
+                    borderColor: '#FF6384',
+                    fill: false
+                },
+                {
+                    label: 'Energy Level',
+                    data: {{ energies|default([])|tojson|safe }},
+                    borderColor: '#36A2EB',
+                    fill: false
+                },
+                {
+                    label: 'Sleep Quality',
+                    data: {{ sleep_quality|default([])|tojson|safe }},
+                    borderColor: '#FFCE56',
+                    fill: false
+                },
+                {
+                    label: 'Sleep Hours',
+                    data: {{ sleep_hours|default([])|tojson|safe }},
+                    borderColor: '#4BC0C0',
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: 'day'
+                    }
+                },
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
+{% endblock %}

@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance Forecast</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .container {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap; /* Allow wrapping for smaller screens */
+        }
+        .column {
+            flex: 1; /* Allow columns to grow equally */
+            margin: 10px; /* Space between columns */
+            min-width: 300px; /* Minimum width for each column */
+        }
+        form {
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        form div {
+            margin-bottom: 15px;
+        }
+        form label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        form input, form select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            max-width: 100%; /* Ensure inputs do not exceed their container */
+        }
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        #charts {
+            display: flex;
+            flex-wrap: wrap; /* Allow wrapping for smaller screens */
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        .chart {
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            width: 100%; /* Set width to 100% for responsive design */
+            min-height: 400px;
+            margin-bottom: 1rem;
+        }
+        /* Dark mode styles */
+        [data-bs-theme="dark"] {
+            background-color: #212529;
+            color: #f8f9fa;
+        }
+        [data-bs-theme="dark"] form {
+            background: #343a40;
+            border: 1px solid #495057;
+        }
+        [data-bs-theme="dark"] button {
+            background-color: #28a745;
+        }
+        [data-bs-theme="dark"] button:hover {
+            background-color: #218838;
+        }
+        #subscription-list {
+            display: flex;
+            flex-direction: column;
+            margin-top: 20px;
+        }
+        .subscription-item {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+        }
+        .card {
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="container-fluid">
+        <h1 class="mb-4">Finance Forecast</h1>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Add New Subscription</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            <div class="mb-3">
+                                <label for="service_name" class="form-label">Service Name:</label>
+                                <input type="text" id="service_name" name="service_name" class="form-control" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="renewal_date" class="form-label">Next Renewal:</label>
+                                <input type="date" id="renewal_date" name="renewal_date" class="form-control" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="monthly_cost" class="form-label">Monthly Cost:</label>
+                                <input type="number" id="monthly_cost" name="monthly_cost" class="form-control" step="0.01" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="category" class="form-label">Category:</label>
+                                <select id="category" name="category" class="form-select" required>
+                                    <option value="Entertainment">Entertainment</option>
+                                    <option value="Utilities">Utilities</option>
+                                    <option value="Cloud Services">Cloud Services</option>
+                                    <option value="Mobile">Mobile</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Add Subscription</button>
+                        </form>
+                    </div>
+                </div>
+    
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Summary</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>Total Monthly Cost: ${{ "%.2f"|format(total_monthly) }}</p>
+                        <p>Total Yearly Cost: ${{ "%.2f"|format(total_yearly) }}</p>
+                        <div id="summaryBarChart" class="chart"></div>
+                    </div>
+                </div>
+            </div>
+    
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Active Subscriptions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Service</th>
+                                        <th>Renewal</th>
+                                        <th>Monthly</th>
+                                        <th>Category</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for sub in subscriptions %}
+                                    <tr>
+                                        <td class="service-name">{{ sub[1] }}</td>
+                                        <td class="renewal-date">{{ sub[2] }}</td>
+                                        <td class="monthly-cost">${{ "%.2f"|format(sub[3]) }}</td>
+                                        <td class="category">{{ sub[5] }}</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-primary edit-btn" data-id="{{ sub[0] }}">Edit</button>
+                                            <button class="btn btn-sm btn-success save-btn d-none" data-id="{{ sub[0] }}">Save</button>
+                                            <form method="POST" action="{{ url_for('delete_subscription', id=sub[0]) }}" style="display: inline;">
+                                                <button type="submit" class="btn btn-sm btn-danger" 
+                                                        onclick="return confirm('Are you sure you want to delete this subscription?')">
+                                                    Delete
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Costs by Category</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="categoryPieChart" class="chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Cost Trends</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="trendChart" class="chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Chart container references
+        const chartContainers = {
+            pie: document.getElementById('categoryPieChart'),
+            bar: document.getElementById('summaryBarChart'),
+            trend: document.getElementById('trendChart')
+        };
+
+        // Verify all chart containers exist
+        if (!chartContainers.pie || !chartContainers.bar || !chartContainers.trend) {
+            console.error('One or more chart containers are missing:', chartContainers);
+            return;
+        }
+
+        try {
+            // Initialize Category Pie Chart
+            const pieChart = new ApexCharts(chartContainers.pie, {
+                series: {{ category_totals|map(attribute='value')|list|tojson }},
+                chart: {
+                    type: 'donut',
+                    height: 350
+                },
+                labels: {{ category_totals|map(attribute='name')|list|tojson }},
+                tooltip: {
+                    y: {
+                        formatter: function(value) {
+                            return '$' + value.toFixed(2)
+                        }
+                    }
+                },
+                legend: {
+                    position: 'bottom'
+                }
+            });
+            pieChart.render();
+
+            // Initialize Summary Bar Chart
+            const barChart = new ApexCharts(chartContainers.bar, {
+                series: [{
+                    name: 'Cost',
+                    data: [{{ total_monthly }}, {{ total_yearly }}]
+                }],
+                chart: {
+                    type: 'bar',
+                    height: 350
+                },
+                plotOptions: {
+                    bar: {
+                        horizontal: true,
+                        columnWidth: '55%',
+                        endingShape: 'rounded'
+                    }
+                },
+                dataLabels: {
+                    enabled: true,
+                    formatter: function(val) {
+                        return '$' + val.toFixed(2);
+                    }
+                },
+                xaxis: {
+                    categories: ['Monthly', 'Yearly'],
+                    labels: {
+                        formatter: function(val) {
+                            return '$' + parseFloat(val).toFixed(2);
+                        }
+                    }
+                },
+                colors: ['#008FFB']
+            });
+            barChart.render();
+
+            // Initialize and update Trend Chart
+            function updateTrendChart() {
+                fetch('/get_finance_trends')
+                    .then(response => {
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        return response.json();
+                    })
+                    .then(data => {
+                        const trendChart = new ApexCharts(chartContainers.trend, {
+                            series: [
+                                {
+                                    name: 'Historical',
+                                    data: data.historical.map((value, index) => ({
+                                        x: new Date(data.dates[index]).getTime(),
+                                        y: value || null
+                                    })).filter(point => point.y !== null)
+                                },
+                                {
+                                    name: 'Projected',
+                                    data: data.projected.map((value, index) => ({
+                                        x: new Date(data.dates[index]).getTime(),
+                                        y: value || null
+                                    })).filter(point => point.y !== null)
+                                }
+                            ],
+                            chart: {
+                                type: 'area',
+                                height: 350,
+                                zoom: {
+                                    enabled: true
+                                }
+                            },
+                            dataLabels: {
+                                enabled: false
+                            },
+                            stroke: {
+                                curve: 'smooth',
+                                width: [3, 3],
+                                dashArray: [0, 5]
+                            },
+                            xaxis: {
+                                type: 'datetime'
+                            },
+                            yaxis: {
+                                labels: {
+                                    formatter: function(value) {
+                                        return '$' + value.toFixed(2);
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                x: {
+                                    format: 'dd MMM yyyy'
+                                },
+                                y: {
+                                    formatter: function(value) {
+                                        return '$' + value.toFixed(2);
+                                    }
+                                }
+                            },
+                            fill: {
+                                type: 'gradient',
+                                gradient: {
+                                    shadeIntensity: 1,
+                                    opacityFrom: 0.7,
+                                    opacityTo: 0.9,
+                                    stops: [0, 100]
+                                }
+                            },
+                            colors: ['#00E396', '#008FFB']
+                        });
+                        trendChart.render();
+                    })
+                    .catch(error => {
+                        console.error('Error loading trend data:', error);
+                        chartContainers.trend.innerHTML = '<div class="alert alert-danger">Error loading trend data</div>';
+                    });
+            }
+
+            // Initial trend chart update
+            updateTrendChart();
+
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                pieChart.render();
+                barChart.render();
+                trendChart && trendChart.render();
+            });
+
+        } catch (error) {
+            console.error('Error initializing charts:', error);
+        }
+
+        document.querySelectorAll('.edit-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const id = this.dataset.id;
+                const row = this.closest('tr');
+                const serviceName = row.querySelector('.service-name');
+                const renewalDate = row.querySelector('.renewal-date');
+                const monthlyCost = row.querySelector('.monthly-cost');
+                const category = row.querySelector('.category');
+
+                serviceName.innerHTML = `<input type="text" value="${serviceName.textContent}" class="form-control" data-id="${id}" data-field="service_name">`;
+                renewalDate.innerHTML = `<input type="date" value="${renewalDate.textContent}" class="form-control" data-id="${id}" data-field="renewal_date">`;
+                monthlyCost.innerHTML = `<input type="number" value="${monthlyCost.textContent.replace('$', '')}" class="form-control" data-id="${id}" data-field="monthly_cost" step="0.01">`;
+                category.innerHTML = `
+                    <select class="form-select" data-id="${id}" data-field="category">
+                        <option value="Entertainment" ${category.textContent === 'Entertainment' ? 'selected' : ''}>Entertainment</option>
+                        <option value="Utilities" ${category.textContent === 'Utilities' ? 'selected' : ''}>Utilities</option>
+                        <option value="Cloud Services" ${category.textContent === 'Cloud Services' ? 'selected' : ''}>Cloud Services</option>
+                        <option value="Mobile" ${category.textContent === 'Mobile' ? 'selected' : ''}>Mobile</option>
+                        <option value="Other" ${category.textContent === 'Other' ? 'selected' : ''}>Other</option>
+                    </select>
+                `;
+
+                this.classList.add('d-none');
+                row.querySelector('.save-btn').classList.remove('d-none');
+            });
+        });
+
+        document.querySelectorAll('.save-btn').forEach(button => {
+            button.addEventListener('click', async function() {
+                const id = this.dataset.id;
+                const row = this.closest('tr');
+                const service_name = row.querySelector('input[data-field="service_name"]').value;
+                const renewal_date = row.querySelector('input[data-field="renewal_date"]').value;
+                const monthly_cost = row.querySelector('input[data-field="monthly_cost"]').value;
+                const category = row.querySelector('select[data-field="category"]').value;
+
+                try {
+                    const response = await fetch(`/update_subscription/${id}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            service_name,
+                            renewal_date,
+                            monthly_cost,
+                            category
+                        })
+                    });
+
+                    if (response.ok) {
+                        alert('Subscription updated successfully!');
+                        location.reload(); // Reload the page to reflect changes
+                    } else {
+                        throw new Error('Failed to update subscription');
+                    }
+                } catch (error) {
+                    alert('Error updating subscription: ' + error.message);
+                }
+            });
+        });
+    });
+    </script>
+    {% endblock %}
+</body>
+</html>

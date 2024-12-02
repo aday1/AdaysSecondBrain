@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4">Egraphs</h1>
+
+    <!-- Mood Entry Form -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Log Daily Metrics</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <input type="date" id="selectedDate" class="form-control form-control-sm" value="{{ selected_date }}">
+                        <button class="btn btn-sm btn-primary" onclick="setToday()">Today</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('log_sub_mood') }}">
+                        <input type="hidden" name="mood_date" value="{{ selected_date }}">
+                        <div class="mb-3">
+                            <label for="mood_time" class="form-label">Time</label>
+                            <div class="input-group">
+                                <input type="time" class="form-control" id="mood_time" name="mood_time" required>
+                                <button type="button" class="btn btn-secondary" onclick="setTimeToNow()">Now</button>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="mood_level" class="form-label">Mood Level (1-10)</label>
+                                    <input type="range" class="form-range" id="mood_level" name="mood_level" min="1" max="10" value="5">
+                                    <div class="text-center" id="moodValue">5</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="energy_level" class="form-label">Energy Level (1-10)</label>
+                                    <input type="range" class="form-range" id="energy_level" name="energy_level" min="1" max="10" value="5">
+                                    <div class="text-center" id="energyValue">5</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="activity" class="form-label">Activity</label>
+                            <input type="text" class="form-control" id="activity" name="activity" placeholder="What are you doing?">
+                        </div>
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Log Metrics</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Weekly Averages (Last 7 Days)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-4">
+                        <h6>Average Mood: {{ weekly_averages.mood }}/10</h6>
+                        <div class="progress">
+                            <div class="progress-bar bg-primary" role="progressbar" 
+                                 style="width: {{ (weekly_averages.mood/10)*100 }}%" 
+                                 aria-valuenow="{{ weekly_averages.mood }}" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="10">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <h6>Average Energy: {{ weekly_averages.energy }}/10</h6>
+                        <div class="progress">
+                            <div class="progress-bar bg-success" role="progressbar" 
+                                 style="width: {{ (weekly_averages.energy/10)*100 }}%" 
+                                 aria-valuenow="{{ weekly_averages.energy }}" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="10">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trend Chart -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Mood & Energy Trends (Last 7 Days)</h5>
+                </div>
+                <div class="card-body">
+                    <div id="metricsChart" style="height: 400px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity Logs -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Recent Activity</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Time</th>
+                                    <th>Mood</th>
+                                    <th>Energy</th>
+                                    <th>Activity</th>
+                                    <th>Notes</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in submood_logs %}
+                                <tr data-log-id="{{ log.id }}">
+                                    <td>{{ log.date }}</td>
+                                    <td>{{ log.time }}</td>
+                                    <td class="editable">
+                                        <span class="display-text">{{ log.mood_level }}</span>
+                                        <input type="range" class="form-range edit-input d-none" min="1" max="10" value="{{ log.mood_level }}">
+                                    </td>
+                                    <td class="editable">
+                                        <span class="display-text">{{ log.energy_level }}</span>
+                                        <input type="range" class="form-range edit-input d-none" min="1" max="10" value="{{ log.energy_level }}">
+                                    </td>
+                                    <td class="editable">
+                                        <span class="display-text">{{ log.activity }}</span>
+                                        <input type="text" class="form-control edit-input d-none" value="{{ log.activity }}">
+                                    </td>
+                                    <td class="editable">
+                                        <span class="display-text">{{ log.notes }}</span>
+                                        <textarea class="form-control edit-input d-none">{{ log.notes }}</textarea>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <button class="btn btn-sm btn-outline-primary edit-btn">Edit</button>
+                                            <button class="btn btn-sm btn-success save-btn d-none">Save</button>
+                                            <button class="btn btn-sm btn-danger cancel-btn d-none">Cancel</button>
+                                            <button class="btn btn-sm btn-outline-danger delete-btn">Delete</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add error display -->
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Get chart container reference
+    const chartContainer = document.getElementById('metricsChart');
+    if (!chartContainer) {
+        console.warn('Metrics chart container not found');
+        return;
+    }
+    
+    // Initialize metrics chart only if container exists
+    const options = {
+        chart: {
+            type: 'bar',  // Change to bar for column graph
+            height: 400,
+            zoom: {
+                enabled: true,
+                type: 'x',
+                autoScaleYaxis: true
+            },
+            toolbar: {
+                autoSelected: 'zoom'
+            }
+        },
+        series: [
+            {
+                name: 'Mood',
+                data: {{ chart_data.moods|tojson|safe }},
+                connectNulls: true  // Ensure lines are connected
+            },
+            {
+                name: 'Energy',
+                data: {{ chart_data.energies|tojson|safe }},
+                connectNulls: true  // Ensure lines are connected
+            }
+        ],
+        xaxis: {
+            type: 'datetime',
+            categories: {{ chart_data.dates|tojson|safe }},
+            title: {
+                text: 'Date & Time'
+            },
+            labels: {
+                rotate: -45,
+                formatter: function(value) {
+                    return new Date(value).toLocaleString();  // Show date and time
+                }
+            }
+        },
+        yaxis: {
+            min: 0,
+            max: 10,
+            title: {
+                text: 'Level'
+            }
+        },
+        stroke: {
+            curve: 'smooth'
+        },
+        dataLabels: {
+            enabled: false
+        },
+        tooltip: {
+            shared: true,
+            intersect: false,
+            x: {
+                format: 'dd MMM yyyy HH:mm'  // Tooltip format for date and time
+            }
+        }
+    };
+
+    const metricsChart = new ApexCharts(chartContainer, options);
+    metricsChart.render();
+
+    // Handle window resize only if chart exists
+    window.addEventListener('resize', function() {
+        if (metricsChart) {
+            metricsChart.resize();
+        }
+    });
+
+    // Add defensive checks for other elements
+    const moodSlider = document.getElementById('mood_level');
+    const energySlider = document.getElementById('energy_level');
+    const moodValue = document.getElementById('moodValue');
+    const energyValue = document.getElementById('energyValue');
+
+    // Only add event listeners if elements exist
+    if (moodSlider && moodValue) {
+        moodSlider.addEventListener('input', function() {
+            moodValue.textContent = this.value;
+        });
+    }
+
+    if (energySlider && energyValue) {
+        energySlider.addEventListener('input', function() {
+            energyValue.textContent = this.value;
+        });
+    }
+
+    // Set current time as default
+    const timeInput = document.getElementById('mood_time');
+    timeInput.value = new Date().toLocaleTimeString('en-GB').slice(0, 5);
+
+    // Add date handling code
+    const dateInput = document.getElementById('selectedDate');
+    const form = document.querySelector('form');
+    const moodDateInput = document.querySelector('input[name="mood_date"]');
+
+    // Update hidden date input when date selector changes
+    dateInput.addEventListener('change', function() {
+        moodDateInput.value = this.value;
+    });
+
+    // Set current time in time input when page loads
+    document.getElementById('mood_time').value = new Date().toLocaleTimeString('en-GB').slice(0, 5);
+
+    // Function to set date to today
+    window.setToday = function() {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.value = today;
+        moodDateInput.value = today;
+    }
+
+    // Set initial date if none selected
+    if (!dateInput.value) {
+        setToday();
+    }
+
+    // Update time to current when form is about to be submitted
+    form.addEventListener('submit', function() {
+        document.getElementById('mood_time').value = new Date().toLocaleTimeString('en-GB').slice(0, 5);
+    });
+
+    // Add setTimeToNow function
+    window.setTimeToNow = function() {
+        document.getElementById('mood_time').value = new Date().toLocaleTimeString('en-GB').slice(0, 5);
+    }
+
+    // Add handlers for editing recent logs
+    document.addEventListener('click', async function(e) {
+        const target = e.target;
+        const row = target.closest('tr');
+        if (!row) return;
+
+        if (target.classList.contains('edit-btn')) {
+            row.querySelectorAll('.display-text').forEach(el => el.classList.add('d-none'));
+            row.querySelectorAll('.edit-input').forEach(el => el.classList.remove('d-none'));
+            row.querySelector('.edit-btn').classList.add('d-none');
+            row.querySelector('.save-btn').classList.remove('d-none');
+            row.querySelector('.cancel-btn').classList.remove('d-none');
+            row.querySelector('.delete-btn').classList.add('d-none');
+        }
+
+        if (target.classList.contains('save-btn')) {
+            const logId = row.getAttribute('data-log-id');
+            const data = {
+                mood_level: row.querySelector('.editable:nth-child(3) input[type="range"]').value,
+                energy_level: row.querySelector('.editable:nth-child(4) input[type="range"]').value,
+                activity: row.querySelector('input[type="text"]').value,
+                notes: row.querySelector('textarea').value
+            };
+
+            try {
+                const response = await fetch(`/update_submood_log/${logId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) throw new Error('Failed to update log');
+
+                // Update display values
+                row.querySelector('.editable:nth-child(3) .display-text').textContent = data.mood_level;
+                row.querySelector('.editable:nth-child(4) .display-text').textContent = data.energy_level;
+                row.querySelector('.editable:nth-child(5) .display-text').textContent = data.activity;
+                row.querySelector('.editable:nth-child(6) .display-text').textContent = data.notes;
+
+                // Reset UI state
+                exitEditMode(row);
+
+                // Refresh the chart
+                updateChart();
+            } catch (error) {
+                alert('Error updating log: ' + error.message);
+            }
+        }
+
+        if (target.classList.contains('cancel-btn')) {
+            exitEditMode(row);
+        }
+
+        if (target.classList.contains('delete-btn')) {
+            if (confirm('Are you sure you want to delete this log?')) {
+                const logId = row.getAttribute('data-log-id');
+                try {
+                    const response = await fetch(`/delete_submood_log/${logId}`, {
+                        method: 'POST'
+                    });
+                    if (response.ok) {
+                        row.remove();
+                    } else {
+                        throw new Error('Failed to delete log');
+                    }
+                } catch (error) {
+                    alert('Error deleting log: ' + error.message);
+                }
+            }
+        }
+    });
+
+    function exitEditMode(row) {
+        row.querySelectorAll('.display-text').forEach(el => el.classList.remove('d-none'));
+        row.querySelectorAll('.edit-input').forEach(el => el.classList.add('d-none'));
+        row.querySelector('.edit-btn').classList.remove('d-none');
+        row.querySelector('.save-btn').classList.add('d-none');
+        row.querySelector('.cancel-btn').classList.add('d-none');
+        row.querySelector('.delete-btn').classList.remove('d-none');
+    }
+
+    // Update the chart function
+    async function updateChart() {
+        const response = await fetch(`/metrics?${new URLSearchParams({
+            date: dateInput.value,
+            'X-Requested-With': 'XMLHttpRequest'
+        })}`);
+        const data = await response.json();
+        
+        if (data.chart_data && data.chart_data.dates) {
+            metricsChart.updateSeries([
+                {
+                    name: 'Mood',
+                    data: data.chart_data.moods,
+                    connectNulls: true  // Ensure lines are connected
+                },
+                {
+                    name: 'Energy',
+                    data: data.chart_data.energies,
+                    connectNulls: true  // Ensure lines are connected
+                }
+            ]);
+            metricsChart.updateOptions({
+                xaxis: {
+                    categories: data.chart_data.dates
+                }
+            });
+        } else {
+            console.warn('No chart data available');
+        }
+    }
+});
+</script>
+{% endblock %}

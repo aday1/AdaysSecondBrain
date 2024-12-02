@@ -1,0 +1,1 @@
+ALTER TABLE habit_logs ADD COLUMN mood INTEGER;

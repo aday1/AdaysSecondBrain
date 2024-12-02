@@ -1,0 +1,406 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Include Sortable.js for drag-and-drop functionality -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
+
+<div class="container-fluid">
+    <h1 class="mb-4">Alcohol Consumption Tracking</h1>
+
+    <!-- Make the entire content area sortable -->
+    <div id="sortable-container">
+        <!-- Log Section -->
+        <div class="sortable-item mb-4" data-id="log-section">
+            <div class="card">
+                <div class="card-header grabbable">
+                    <h5 class="card-title mb-0">Log Alcohol Consumption</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('alcohol') }}">
+                        <div class="mb-3">
+                            <label for="drink_type" class="form-label">Drink Type</label>
+                            <select class="form-select" id="drink_type" name="drink_type" required>
+                                <option value="">Select a drink type</option>
+                                {% for drink_type in drink_types %}
+                                <option value="{{ drink_type }}">{{ drink_type }}</option>
+                                {% endfor %}
+                                <option value="new">+ Add New Drink Type</option>
+                            </select>
+                            <input type="text" class="form-control mt-2 d-none" id="new-drink" placeholder="Enter new drink type">
+                        </div>
+                        <div class="mb-3">
+                            <label for="units" class="form-label">Standard Drinks</label>
+                            <input type="number" class="form-control" id="units" name="units" step="0.1" required>
+                            <small class="form-text text-muted">
+                                Australian Standard Drinks Guide:<br>
+                                • Full Strength Beer Can (375ml, 4.8%) = 1.4 drinks<br>
+                                • Wine Glass (150ml, 13%) = 1.5 drinks<br>
+                                • Spirit Shot (30ml, 40%) = 0.95 drinks<br>
+                                • Pre-mix Can (375ml, 5%) = 1.5 drinks
+                            </small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Log Consumption</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Weekly Summary -->
+        <div class="sortable-item mb-4" data-id="summary-section">
+            <div class="card">
+                <div class="card-header grabbable">
+                    <h5 class="card-title mb-0">Weekly Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <h6>Total Standard Drinks</h6>
+                            <div class="h3">{{ "%.1f"|format(weekly_total) }}</div>
+                        </div>
+                        <div class="col-6">
+                            <h6>Daily Average</h6>
+                            <div class="h3">{{ "%.1f"|format(weekly_total / 7) }}</div>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        {% set recommended = 10 %}
+                        {% set percent = ((weekly_total / recommended * 100)|round|int) %}
+                        <label class="form-label">Weekly Limit (10 standard drinks)</label>
+                        <div class="progress">
+                            <div class="progress-bar {% if percent > 100 %}bg-danger{% elif percent > 75 %}bg-warning{% else %}bg-success{% endif %}"
+                                 role="progressbar"
+                                 style="width: {{ min(percent, 100) }}%"
+                                 aria-valuenow="{{ percent }}"
+                                 aria-valuemin="0"
+                                 aria-valuemax="100">{{ percent }}%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Drink Types Management -->
+        <div class="sortable-item mb-4" data-id="drinks-section">
+            <div class="card">
+                <div class="card-header grabbable">
+                    <h5 class="card-title mb-0">Common Drink Types</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Drink Type</th>
+                                    <th>Times Logged</th>
+                                    <th>Average Standard Drinks</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for drink_type in drink_types %}
+                                {% set count = namespace(value=0) %}
+                                {% set total_units = namespace(value=0) %}
+                                {% for log in alcohol_logs %}
+                                    {% if log[2] == drink_type %}
+                                        {% set count.value = count.value + 1 %}
+                                        {% set total_units.value = total_units.value + log[3] %}
+                                    {% endif %}
+                                {% endfor %}
+                                <tr>
+                                    <td>{{ drink_type }}</td>
+                                    <td>{{ count.value }}</td>
+                                    <td>{{ "%.1f"|format(total_units.value / count.value) if count.value > 0 else "-" }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Consumption -->
+        <div class="sortable-item mb-4" data-id="recent-section">
+            <div class="card">
+                <div class="card-header grabbable">
+                    <h5 class="card-title mb-0">Recent Consumption</h5>
+                </div>
+                <div class="card-body">
+                    {% if alcohol_logs %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Drink</th>
+                                    <th>Standard Drinks</th>
+                                    <th>Notes</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in alcohol_logs %}
+                                <tr data-id="{{ log[0] }}">
+                                    <td>{{ log[1] }}</td>
+                                    <td>
+                                        <span class="view-mode">{{ log[2] }}</span>
+                                        <select class="form-select edit-mode" style="display: none;">
+                                            {% for drink_type in drink_types %}
+                                            <option value="{{ drink_type }}" {% if drink_type == log[2] %}selected{% endif %}>{{ drink_type }}</option>
+                                            {% endfor %}
+                                            <option value="new">+ Add New Drink Type</option>
+                                        </select>
+                                        <input type="text" class="form-control mt-2 edit-mode new-drink-edit" style="display: none;" placeholder="Enter new drink type">
+                                    </td>
+                                    <td>
+                                        <span class="view-mode">{{ "%.1f"|format(log[3]) }}</span>
+                                        <input type="number" class="form-control edit-mode" value="{{ "%.1f"|format(log[3]) }}" step="0.1" style="display: none;">
+                                    </td>
+                                    <td>
+                                        <span class="view-mode">{{ log[4] if log[4] else '-' }}</span>
+                                        <input type="text" class="form-control edit-mode" value="{{ log[4] if log[4] else '' }}" style="display: none;">
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-primary edit-btn">Edit</button>
+                                        <button class="btn btn-sm btn-success save-btn" style="display: none;">Save</button>
+                                        <button class="btn btn-sm btn-danger cancel-btn" style="display: none;">Cancel</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-center">No recent alcohol consumption logs</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Health Tips -->
+        <div class="sortable-item mb-4" data-id="tips-section">
+            <div class="card">
+                <div class="card-header grabbable">
+                    <h5 class="card-title mb-0">Health Tips</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group">
+                        <li class="list-group-item">Stay within 10 standard drinks per week (Australian Guidelines)</li>
+                        <li class="list-group-item">Have at least 3 alcohol-free days per week</li>
+                        <li class="list-group-item">Stay hydrated and drink water between alcoholic drinks</li>
+                        <li class="list-group-item">Eat before and while drinking alcohol</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+#sortable-container {
+    min-height: 50px;
+    padding: 10px;
+}
+.sortable-item {
+    margin-bottom: 20px;
+    transition: transform 0.2s ease;
+}
+.sortable-item.sortable-ghost {
+    opacity: 0.4;
+}
+.sortable-item.sortable-chosen {
+    background-color: #f8f9fa;
+}
+.grabbable {
+    cursor: move;
+    cursor: grab;
+    cursor: -moz-grab;
+    cursor: -webkit-grab;
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-bottom: 2px solid #dee2e6;
+}
+.grabbable:active {
+    cursor: grabbing;
+    cursor: -moz-grabbing;
+    cursor: -webkit-grabbing;
+}
+.edit-mode {
+    display: none;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Sortable for drag-and-drop
+    new Sortable(document.getElementById('sortable-container'), {
+        animation: 150,
+        handle: '.grabbable',
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        dragClass: 'sortable-drag',
+        onEnd: function(evt) {
+            // Save the new order if needed
+            const order = Array.from(evt.to.children).map(item => item.dataset.id);
+            console.log('New order:', order);
+            // Save to localStorage
+            localStorage.setItem('alcoholOrder', JSON.stringify(order));
+        }
+    });
+
+    // Load saved order if exists
+    const savedOrder = localStorage.getItem('alcoholOrder');
+    if (savedOrder) {
+        const container = document.getElementById('sortable-container');
+        const itemsArray = Array.from(container.children);
+        const orderArray = JSON.parse(savedOrder);
+        
+        // Reorder elements
+        orderArray.forEach(id => {
+            const element = itemsArray.find(item => item.dataset.id === id);
+            if (element) {
+                container.appendChild(element);
+            }
+        });
+    }
+
+    // Handle drink type dropdown in the form
+    const drinkTypeSelect = document.getElementById('drink_type');
+    const newDrinkInput = document.getElementById('new-drink');
+
+    drinkTypeSelect.addEventListener('change', function() {
+        if (this.value === 'new') {
+            newDrinkInput.classList.remove('d-none');
+            newDrinkInput.required = true;
+            this.name = ''; // Remove the name attribute so it's not submitted
+        } else {
+            newDrinkInput.classList.add('d-none');
+            newDrinkInput.required = false;
+            this.name = 'drink_type'; // Restore the name attribute
+        }
+    });
+
+    // Handle form submission
+    const form = document.querySelector('form');
+    form.addEventListener('submit', function(e) {
+        if (drinkTypeSelect.value === 'new') {
+            e.preventDefault();
+            const newDrinkValue = newDrinkInput.value.trim();
+            if (newDrinkValue) {
+                drinkTypeSelect.innerHTML += `<option value="${newDrinkValue}" selected>${newDrinkValue}</option>`;
+                drinkTypeSelect.value = newDrinkValue;
+                drinkTypeSelect.name = 'drink_type';
+                form.submit();
+            }
+        }
+    });
+
+    // Handle inline editing
+    document.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const row = this.closest('tr');
+            row.querySelectorAll('.view-mode').forEach(el => el.style.display = 'none');
+            row.querySelectorAll('.edit-mode').forEach(el => {
+                if (!el.classList.contains('new-drink-edit')) {
+                    el.style.display = 'block';
+                }
+            });
+            this.style.display = 'none';
+            row.querySelector('.save-btn').style.display = 'inline-block';
+            row.querySelector('.cancel-btn').style.display = 'inline-block';
+
+            // Handle drink type dropdown in edit mode
+            const editSelect = row.querySelector('select.edit-mode');
+            const newDrinkEdit = row.querySelector('.new-drink-edit');
+            editSelect.addEventListener('change', function() {
+                if (this.value === 'new') {
+                    newDrinkEdit.style.display = 'block';
+                    newDrinkEdit.required = true;
+                } else {
+                    newDrinkEdit.style.display = 'none';
+                    newDrinkEdit.required = false;
+                }
+            });
+        });
+    });
+
+    document.querySelectorAll('.cancel-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const row = this.closest('tr');
+            row.querySelectorAll('.view-mode').forEach(el => el.style.display = 'inline');
+            row.querySelectorAll('.edit-mode').forEach(el => el.style.display = 'none');
+            row.querySelector('.edit-btn').style.display = 'inline-block';
+            this.style.display = 'none';
+            row.querySelector('.save-btn').style.display = 'none';
+        });
+    });
+
+    document.querySelectorAll('.save-btn').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const row = this.closest('tr');
+            const logId = row.dataset.id;
+            const drinkTypeSelect = row.querySelector('select.edit-mode');
+            const newDrinkEdit = row.querySelector('.new-drink-edit');
+            let drinkType = drinkTypeSelect.value;
+            if (drinkType === 'new') {
+                drinkType = newDrinkEdit.value.trim();
+                if (!drinkType) {
+                    alert('Please enter a new drink type');
+                    return;
+                }
+            }
+            const units = parseFloat(row.querySelector('input[type="number"].edit-mode').value);
+            const notes = row.querySelector('input[type="text"].edit-mode').value;
+
+            try {
+                const response = await fetch('/update_alcohol_log', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        id: logId,
+                        drink_type: drinkType,
+                        units: units,
+                        notes: notes
+                    })
+                });
+
+                if (response.ok) {
+                    // Add new drink type to dropdown if it's new
+                    if (!drinkTypeSelect.querySelector(`option[value="${drinkType}"]`)) {
+                        const option = document.createElement('option');
+                        option.value = drinkType;
+                        option.textContent = drinkType;
+                        drinkTypeSelect.insertBefore(option, drinkTypeSelect.querySelector('option[value="new"]'));
+                    }
+
+                    // Update view mode values
+                    row.querySelector('.view-mode:nth-of-type(1)').textContent = drinkType;
+                    row.querySelector('.view-mode:nth-of-type(2)').textContent = units.toFixed(1);
+                    row.querySelector('.view-mode:nth-of-type(3)').textContent = notes || '-';
+
+                    // Switch back to view mode
+                    row.querySelectorAll('.view-mode').forEach(el => el.style.display = 'inline');
+                    row.querySelectorAll('.edit-mode').forEach(el => el.style.display = 'none');
+                    this.style.display = 'none';
+                    row.querySelector('.cancel-btn').style.display = 'none';
+                    row.querySelector('.edit-btn').style.display = 'inline-block';
+
+                    // Reload the page to update statistics
+                    window.location.reload();
+                } else {
+                    throw new Error('Failed to update');
+                }
+            } catch (error) {
+                alert('Failed to update the log. Please try again.');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
+</write_to_file>

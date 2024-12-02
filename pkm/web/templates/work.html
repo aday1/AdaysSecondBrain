@@ -1,0 +1,1183 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Include only necessary scripts -->
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
+
+<div class="container-fluid">
+    <h1 class="mb-4">Work Hours Tracking</h1>
+
+    <!-- Time Management Alert at the top -->
+    <div class="alert alert-info mb-4">
+        <i class="fas fa-bed"></i> Remember to prioritize sleep! If you experience insomnia, try to relax and meditate.
+    </div>
+
+    <!-- Main Two-column layout -->
+    <div class="row">
+        <!-- Left Column (Pomodoro Timer) -->
+        <div class="col-md-6">
+            <!-- Pomodoro Timer -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Pomodoro Timer</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="mb-3">
+                                <label for="pomodoro-type" class="form-label">Pomodoro Type</label>
+                                <select class="form-select" id="pomodoro-type" name="pomodoro-type" required>
+                                    <option value="">Select Type</option>
+                                    {% for type in pomodoro_types %}
+                                    <option value="{{ type }}">{{ type }}</option>
+                                    {% endfor %}
+                                    <option value="new">+ Add New Type</option>
+                                </select>
+                                <input type="text" class="form-control mt-2 d-none" id="new-pomodoro-type" placeholder="Enter new type name">
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="pomodoro-description" class="form-label">Description</label>
+                                <textarea class="form-control" id="pomodoro-description" rows="2"></textarea>
+                            </div>
+
+                            <div class="text-center">
+                                <h2 id="pomodoro-timer" class="display-1 mb-3">25:00</h2>
+                                <div class="btn-group mb-3">
+                                    <button class="btn btn-primary" id="pomodoro-start">Start</button>
+                                    <button class="btn btn-warning" id="pomodoro-pause" disabled>Pause</button>
+                                    <button class="btn btn-danger" id="pomodoro-reset">Reset</button>
+                                    <button class="btn btn-info" id="pomodoro-skip" disabled>Skip to Break</button>
+                                    <button class="btn btn-danger" id="pomodoro-stop" disabled>Stop</button>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="custom-timer" class="form-label">Work Duration (minutes)</label>
+                                    <input type="number" class="form-control" id="custom-timer" min="1" value="25">
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="break-duration" class="form-label">Break Duration (minutes)</label>
+                                    <input type="number" class="form-control" id="break-duration" min="1" value="5">
+                                </div>
+
+                            </div>
+                            <div class="mt-4">
+                                <h6 class="mb-3">Recent Pomodoro Sessions</h6>
+                                <div class="col-12">
+                                    {% if pomodoro_stats %}
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover">
+                                            <thead>
+                                                <tr>
+                                                    <th>Date</th>
+                                                    <th>Type</th>
+                                                    <th>Work Duration</th>
+                                                    <th>Break Duration</th>
+                                                    <th>Distractions</th>
+                                                    <th>Notes</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for stat in pomodoro_stats %}
+                                                <tr>
+                                                    <td>{{ stat.date }}</td>
+                                                    <td>{{ stat.type }}</td>
+                                                    <td>{{ stat.duration }} min</td>
+                                                    <td>{{ stat.break_duration }} min</td>
+                                                    <td>{{ stat.distractions }}</td>
+                                                    <td>
+                                                        <span class="text-truncate d-inline-block" style="max-width: 150px;" title="{{ stat.notes if stat.notes else '-' }}">
+                                                            {{ stat.notes if stat.notes else '-' }}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {% else %}
+                                    <div class="alert alert-info">
+                                        No recent Pomodoro stats
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column (Work Logs) -->
+        <div class="col-md-6">
+            <!-- Log Work Hours -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Log Work Hours</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('work') }}">
+                        <div class="mb-3">
+                            <label for="project" class="form-label">Project</label>
+                            <select class="form-select" id="project" name="project" required>
+                                <option value="">Select Project</option>
+                                <option value="new">+ Add New Project</option>
+                                {% for project in existing_projects %}
+                                    <option value="{{ project.name }}">{{ project.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3" id="new-project-input" style="display: none;">
+                            <label for="new_project_input" class="form-label">New Project Name</label>
+                            <input type="text" class="form-control" id="new_project_input" name="new_project_input">
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <input type="text" class="form-control" id="description" name="description">
+                        </div>
+                        <div class="mb-3">
+                            <label for="hours" class="form-label">Hours</label>
+                            <input type="number" class="form-control" id="hours" name="hours" step="0.1" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Log Work</button>
+                    </form>
+                    <script>
+                    document.getElementById('project').addEventListener('change', function() {
+                        var newProjectInput = document.getElementById('new-project-input');
+                        if (this.value === 'new') {
+                            newProjectInput.style.display = 'block';
+                        } else {
+                            newProjectInput.style.display = 'none';
+                        }
+                    });
+                    </script>
+                    <div class="mt-4">
+                        <h6 class="mb-3">Recent Work Logs</h6>
+                        {% if work_logs %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Project</th>
+                                        <th>Description</th>
+                                        <th>Hours</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for log in work_logs %}
+                                    <tr data-log-id="{{ log.id }}">
+                                        <td>{{ log.date }}</td>
+                                        <td class="editable project-cell">
+                                            <span class="display-text">{{ log.project }}</span>
+                                            <select class="form-select edit-input d-none">
+                                                {% for project in existing_projects %}
+                                                <option value="{{ project.name }}" {% if project.name == log.project %}selected{% endif %}>{{ project.name }}</option>
+                                                {% endfor %}
+                                                <option value="new">+ Add New Project</option>
+                                            </select>
+                                            <input type="text" class="form-control edit-input d-none new-project-name" style="display: none;">
+                                        </td>
+                                        <td class="editable description-cell">
+                                            <span class="display-text">{{ log.description if log.description else '-' }}</span>
+                                            <textarea class="form-control edit-input d-none">{{ log.description if log.description else '' }}</textarea>
+                                        </td>
+                                        <td class="editable hours-cell">
+                                            <span class="display-text">{{ "%.1f"|format(log.hours) }}</span>
+                                            <input type="number" step="0.1" class="form-control edit-input d-none" value="{{ "%.1f"|format(log.hours) }}">
+                                        </td>
+                                        <td>
+                                            <div class="btn-group">
+                                                <button type="button" class="btn btn-sm btn-outline-primary edit-btn">Edit</button>
+                                                <button type="button" class="btn btn-sm btn-success save-btn d-none">Save</button>
+                                                <button type="button" class="btn btn-sm btn-danger cancel-btn d-none">Cancel</button>
+                                                <button type="button" class="btn btn-sm btn-outline-danger delete-btn">Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="table-info">
+                                        <td colspan="2"><strong>Total (7 Days)</strong></td>
+                                        <td colspan="2"><strong>{{ "%.1f"|format(work_logs|map(attribute='hours')|list|sum) }}</strong></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-center">No recent work logs</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graphs Section - Full Width -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <h3 class="mb-4">Work Distribution Analytics</h3>
+            <div class="row">
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Today's Distribution</h5>
+                        </div>
+                        <div class="card-body chart-container">
+                            <div id="workDistributionDaily"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Weekly Distribution</h5>
+                        </div>
+                        <div class="card-body chart-container">
+                            <div id="workDistributionWeekly"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Monthly Distribution</h5>
+                        </div>
+                        <div class="card-body chart-container">
+                            <div id="workDistributionMonthly"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Yearly Distribution</h5>
+                        </div>
+                        <div class="card-body chart-container">
+                            <div id="workDistributionYearly"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Update the modal structure -->
+<div class="modal fade" id="distractionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Pomodoro Complete!</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>How many distractions did you have during this session?</p>
+                <input type="number" class="form-control" id="distractionCount" value="0" min="0">
+                <textarea class="form-control mt-3" id="sessionNotes" placeholder="Any notes about this session?"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="startBreakBtn">Start Break</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add audio element -->
+<audio id="alarmSound" src="/static/alarm.mp3"></audio>
+
+<!-- Update the styles -->
+<style>
+.card {
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(0,0,0,.125);
+}
+
+.card-body {
+    padding: 1rem;
+}
+
+.chart-container {
+    height: 400px;
+    position: relative;
+    width: 100%;
+}
+
+#workDistributionDaily,
+#workDistributionWeekly,
+#workDistributionMonthly,
+#workDistributionYearly {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* Dark mode support */
+[data-bs-theme="dark"] .echarts-tooltip {
+    background-color: rgba(50, 50, 50, 0.7) !important;
+    border-color: #666 !important;
+}
+
+/* Remove any conflicting styles */
+.overflow-hidden {
+    overflow: visible !important;
+}
+
+/* Ensure consistent card heights in rows */
+.row .card {
+    height: calc(100% - 1.5rem);
+    margin-bottom: 1.5rem;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle project selection
+    const projectSelect = document.getElementById('project');
+    const newProjectInput = document.getElementById('new-project-input');
+    const form = document.querySelector('form');
+
+    if (projectSelect && newProjectInput && form) {
+        // Project selection change handler
+        projectSelect.addEventListener('change', function() {
+            if (this.value === 'new') {
+                newProjectInput.style.display = 'block';
+                newProjectInput.setAttribute('required', '');
+            } else {
+                newProjectInput.style.display = 'none';
+                newProjectInput.removeAttribute('required');
+                newProjectInput.value = '';
+            }
+        });
+
+        // Form submission handler
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            let projectName = projectSelect.value;
+            if (projectName === 'new') {
+                const newName = document.getElementById('new_project_input')?.value;
+                if (!newName || !newName.trim()) {
+                    alert('Please enter a new project name');
+                    return;
+                }
+                projectName = newName.trim();
+            }
+
+            try {
+                const formData = new FormData(this);
+                formData.set('project', projectName);
+
+                const response = await fetch(this.action, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    throw new Error('Failed to submit work log');
+                }
+            } catch (error) {
+                alert('Error submitting work log: ' + error.message);
+            }
+        });
+    }
+
+    // Handle form submission
+    const form = document.querySelector('form'); // Change workForm to form
+    if (form) { // Add null check
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            let projectName;
+            if (projectSelect.value === 'new') {
+                projectName = newProjectInput.value.trim();
+                if (!projectName) {
+                    alert('Please enter a new project name');
+                    return;
+                }
+            } else {
+                projectName = projectSelect.value;
+            }
+
+            try {
+                const formData = new FormData(this);
+                formData.set('project', projectName);
+
+                const response = await fetch(this.action, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    throw new Error('Failed to submit work log');
+                }
+            } catch (error) {
+                alert('Error submitting work log: ' + error.message);
+            }
+        });
+    }
+
+    // Event delegation for edit/delete buttons using document
+    document.addEventListener('click', function(e) {
+        // Handle edit button click
+        if (e.target.classList.contains('edit-btn')) {
+            const row = e.target.closest('tr');
+            if (!row) return;
+            
+            const displayTexts = row.querySelectorAll('.display-text');
+            const editInputs = row.querySelectorAll('.edit-input');
+            const saveBtn = row.querySelector('.save-btn');
+            const cancelBtn = row.querySelector('.cancel-btn');
+            const deleteBtn = row.querySelector('.delete-btn');
+
+            displayTexts.forEach(el => el && el.classList.add('d-none'));
+            editInputs.forEach(el => el && el.classList.remove('d-none'));
+            e.target.classList.add('d-none');
+            saveBtn && saveBtn.classList.remove('d-none');
+            cancelBtn && cancelBtn.classList.remove('d-none');
+            deleteBtn && deleteBtn.classList.add('d-none');
+        }
+
+        // Handle delete button click
+        if (e.target.classList.contains('delete-btn')) {
+            const row = e.target.closest('tr');
+            if (!row) return;
+            
+            const logId = row.getAttribute('data-log-id');
+            if (!logId || !confirm('Are you sure you want to delete this work log?')) {
+                return;
+            }
+
+            fetch('/delete_work_log', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ id: logId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    row.remove();
+                    alert('Work log deleted successfully');
+                } else {
+                    throw new Error(data.error || 'Failed to delete work log');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error deleting work log: ' + error.message);
+            });
+        }
+
+        // Handle save button click
+        if (e.target.classList.contains('save-btn')) {
+            const row = e.target.closest('tr');
+            if (!row) return;
+
+            const logId = row.getAttribute('data-log-id');
+            const project = row.querySelector('.project-cell .edit-input').value;
+            const description = row.querySelector('.description-cell .edit-input').value;
+            const hours = row.querySelector('.hours-cell .edit-input').value;
+
+            fetch('/update_work_log', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    id: logId,
+                    project: project,
+                    description: description,
+                    hours: hours
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update display values
+                    row.querySelector('.project-cell .display-text').textContent = project;
+                    row.querySelector('.description-cell .display-text').textContent = description || '-';
+                    row.querySelector('.hours-cell .display-text').textContent = parseFloat(hours).toFixed(1);
+
+                    // Reset UI state
+                    const displayTexts = row.querySelectorAll('.display-text');
+                    const editInputs = row.querySelectorAll('.edit-input');
+                    const editBtn = row.querySelector('.edit-btn');
+                    const cancelBtn = row.querySelector('.cancel-btn');
+                    const deleteBtn = row.querySelector('.delete-btn');
+
+                    displayTexts.forEach(el => el && el.classList.remove('d-none'));
+                    editInputs.forEach(el => el && el.classList.add('d-none'));
+                    editBtn && editBtn.classList.remove('d-none');
+                    deleteBtn && deleteBtn.classList.remove('d-none');
+                    e.target.classList.add('d-none');
+                    cancelBtn && cancelBtn.classList.add('d-none');
+
+                    alert('Work log updated successfully');
+                } else {
+                    throw new Error(data.error || 'Failed to update work log');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error updating work log: ' + error.message);
+            });
+        }
+
+        // Handle cancel button click
+        if (e.target.classList.contains('cancel-btn')) {
+            const row = e.target.closest('tr');
+            if (!row) return;
+
+            const displayTexts = row.querySelectorAll('.display-text');
+            const editInputs = row.querySelectorAll('.edit-input');
+            const editBtn = row.querySelector('.edit-btn');
+            const saveBtn = row.querySelector('.save-btn');
+            const deleteBtn = row.querySelector('.delete-btn');
+
+            displayTexts.forEach(el => el && el.classList.remove('d-none'));
+            editInputs.forEach(el => el && el.classList.add('d-none'));
+            editBtn && editBtn.classList.remove('d-none');
+            deleteBtn && deleteBtn.classList.remove('d-none');
+            e.target.classList.add('d-none');
+            saveBtn && saveBtn.classList.add('d-none');
+        }
+    });
+
+    // Initialize charts only if container exists
+    const graphsContainer = document.getElementById('graphs-container');
+    if (graphsContainer) {
+        // ...existing charts initialization code...
+    }
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const charts = {};
+    const colors = [
+        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+        '#FF9F40', '#4BCFB5', '#B980FF', '#FF80B9', '#80FFB9'
+    ];
+
+    function createPieChart(elementId, title) {
+        const chart = echarts.init(document.getElementById(elementId));
+        const option = {
+            title: {
+                text: title,
+                left: 'center'
+            },
+            tooltip: {
+                trigger: 'item',
+                formatter: function(params) {
+                    return `${params.name}: ${params.value.toFixed(1)}h (${params.percent}%)`
+                }
+            },
+            legend: {
+                orient: 'horizontal',
+                bottom: 10,
+                type: 'scroll'
+            },
+            series: [{
+                name: 'Work Hours',
+                type: 'pie',
+                radius: ['40%', '70%'],
+                avoidLabelOverlap: true,
+                itemStyle: {
+                    borderRadius: 10,
+                    borderColor: '#fff',
+                    borderWidth: 2
+                },
+                label: {
+                    show: false
+                },
+                emphasis: {
+                    label: {
+                        show: true,
+                        fontSize: 14
+                    }
+                },
+                data: []
+            }]
+        };
+        chart.setOption(option);
+        return chart;
+    }
+
+    // Initialize charts
+    ['Daily', 'Weekly', 'Monthly', 'Yearly'].forEach(period => {
+        const elementId = `workDistribution${period}`;
+        const element = document.getElementById(elementId);
+        if (element) {
+            charts[period.toLowerCase()] = createPieChart(elementId, `${period} Work Distribution`);
+        }
+    });
+
+    // Update charts function
+    async function updateCharts() {
+        try {
+            const response = await fetch('/get_work_data');
+            if (!response.ok) throw new Error('Failed to fetch work data');
+            
+            const data = await response.json();
+            
+            Object.entries(charts).forEach(([period, chart]) => {
+                const periodData = data[period];
+                if (periodData?.projects?.length > 0) {
+                    const chartData = periodData.projects.map((project, index) => ({
+                        name: project,
+                        value: periodData.total_hours[index],
+                        itemStyle: { color: colors[index % colors.length] }
+                    }));
+                    chart.setOption({ series: [{ data: chartData }] });
+                } else {
+                    chart.setOption({
+                        series: [{
+                            data: [{ name: 'No data', value: 0, itemStyle: { color: colors[0] } }]
+                        }]
+                    });
+                }
+            });
+
+        } catch (error) {
+            console.error('Error updating charts:', error);
+            Object.values(charts).forEach(chart => {
+                chart.setOption({
+                    series: [{
+                        data: [{ name: 'Error loading data', value: 0, itemStyle: { color: '#ff0000' } }]
+                    }]
+                });
+            });
+        }
+    }
+
+    // Initial update
+    updateCharts();
+
+    // Update periodically
+    setInterval(updateCharts, 300000); // Update every 5 minutes
+
+    // Update charts after form submission
+    document.querySelector('form').addEventListener('submit', function() {
+        setTimeout(updateCharts, 1000); // Update charts 1 second after form submission
+    });
+
+    // Handle window resize
+    window.addEventListener('resize', function() {
+        Object.values(charts).forEach(chart => chart.resize());
+    });
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Move variables to top
+    let timer = null;
+    let timeLeft = 25 * 60;
+    let isBreak = false;
+    let isPaused = false;
+    let distractionCount = 0;
+    let sessionNotes = '';
+    
+    // Get DOM elements
+    const timerDisplay = document.getElementById('pomodoro-timer');
+    const startBtn = document.getElementById('pomodoro-start');
+    const pauseBtn = document.getElementById('pomodoro-pause');
+    const resetBtn = document.getElementById('pomodoro-reset');
+    const skipBtn = document.getElementById('pomodoro-skip');
+    const stopBtn = document.getElementById('pomodoro-stop');
+    const customTimer = document.getElementById('custom-timer');
+    const breakDuration = document.getElementById('break-duration');
+    const pomodoroType = document.getElementById('pomodoro-type');
+    const newPomodoroType = document.getElementById('new-pomodoro-type');
+    const alarmSound = document.getElementById('alarmSound');
+    const distractionModal = new bootstrap.Modal(document.getElementById('distractionModal'));
+    const startBreakBtn = document.getElementById('startBreakBtn');
+
+    // Add start break button handler
+    startBreakBtn.addEventListener('click', function() {
+        // Get values before hiding modal
+        distractionCount = parseInt(document.getElementById('distractionCount').value) || 0;
+        sessionNotes = document.getElementById('sessionNotes').value || '';
+        
+        // Hide modal
+        distractionModal.hide();
+        
+        // Reset timer for break
+        timeLeft = parseInt(breakDuration.value) * 60;
+        isBreak = true;
+        updateTimerDisplay();
+        
+        // Clear previous timer if exists
+        if (timer) {
+            clearInterval(timer);
+        }
+        
+        // Start new timer
+        startTimer();
+    });
+
+    // ...existing code...
+
+    // Pomodoro Timer Logic
+    function playAlarm() {
+        alarmSound.play().catch(error => console.log('Error playing sound:', error));
+    }
+
+    function askForDistractions() {
+        playAlarm();
+        distractionModal.show();
+    }
+
+    function updateTimerDisplay() {
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    function startTimer() {
+        if (pomodoroType.value === '') {
+            alert('Please select or add a Pomodoro type');
+            return;
+        }
+
+        if (pomodoroType.value === 'new' && !newPomodoroType.value.trim()) {
+            alert('Please enter a new Pomodoro type name');
+            return;
+        }
+
+        startBtn.disabled = true;
+        pauseBtn.disabled = false;
+        skipBtn.disabled = false;
+        stopBtn.disabled = false;
+
+        if (!timer) {
+            timeLeft = parseInt(customTimer.value) * 60;
+            updateTimerDisplay();
+        }
+
+        timer = setInterval(() => {
+            if (timeLeft > 0) {
+                timeLeft--;
+                updateTimerDisplay();
+            } else {
+                clearInterval(timer);
+                timer = null;
+                
+                if (!isBreak) {
+                    // Ask for distractions before starting break
+                    askForDistractions();
+                } else {
+                    // Break finished
+                    playAlarm();
+                    resetTimer();
+                    logPomodoroSession();
+                    alert('Break finished! Start another Pomodoro?');
+                }
+            }
+        }, 1000);
+    }
+
+    function pauseTimer() {
+        if (timer) {
+            if (!isPaused) {
+                clearInterval(timer);
+                timer = null;
+                isPaused = true;
+                pauseBtn.textContent = 'Resume';
+            } else {
+                startTimer();
+                isPaused = false;
+                pauseBtn.textContent = 'Pause';
+            }
+        }
+    }
+
+    function resetTimer() {
+        clearInterval(timer);
+        timer = null;
+        timeLeft = parseInt(customTimer.value) * 60;
+        isBreak = false;
+        isPaused = false;
+        updateTimerDisplay();
+        startBtn.disabled = false;
+        pauseBtn.disabled = true;
+        skipBtn.disabled = true;
+        stopBtn.disabled = true;
+        pauseBtn.textContent = 'Pause';
+    }
+
+    function skipToBreak() {
+        if (!isBreak) {
+            logPomodoroSession();
+            timeLeft = parseInt(breakDuration.value) * 60;
+            isBreak = true;
+            updateTimerDisplay();
+        }
+    }
+
+    function stopTimer() {
+        if (confirm('Are you sure you want to stop the current session?')) {
+            if (!isBreak) {
+                logPomodoroSession();
+            }
+            resetTimer();
+        }
+    }
+
+    async function logPomodoroSession() {
+        try {
+            const type = pomodoroType.value === 'new' ? newPomodoroType.value : pomodoroType.value;
+            const description = document.getElementById('pomodoro-description').value;
+            const duration = parseInt(customTimer.value);
+            
+            const response = await fetch('/log_pomodoro_session', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    type: type,
+                    description: description,
+                    duration: duration,
+                    break_duration: parseInt(breakDuration.value),
+                    distractions: distractionCount,
+                    notes: sessionNotes
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to log Pomodoro session');
+            }
+            
+            // Reset values
+            distractionCount = 0;
+            sessionNotes = '';
+            document.getElementById('pomodoro-description').value = '';
+            
+            // Refresh the page to show updated stats
+            window.location.reload();
+            
+        } catch (error) {
+            console.error('Error logging Pomodoro session:', error);
+        }
+    }
+
+    // Handle new Pomodoro type
+    if (pomodoroType) {
+        pomodoroType.addEventListener('change', function() {
+            if (this.value === 'new' && newPomodoroType) {
+                newPomodoroType.classList.remove('d-none');
+                newPomodoroType.required = true;
+                newPomodoroType.focus();
+            } else if (newPomodoroType) {
+                newPomodoroType.classList.add('d-none');
+                newPomodoroType.required = false;
+                newPomodoroType.value = '';
+            }
+        });
+    }
+
+    if (newPomodoroType) {
+        newPomodoroType.addEventListener('blur', async function() {
+            if (this.value.trim() && pomodoroType.value === 'new') {
+                try {
+                    const response = await fetch('/add_pomodoro_type', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type_name: this.value.trim()
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Failed to add Pomodoro type');
+                    }
+
+                    const option = new Option(data.type_name, data.type_name);
+                    pomodoroType.insertBefore(option, pomodoroType.querySelector('option[value="new"]'));
+                    pomodoroType.value = data.type_name;
+                    this.classList.add('d-none');
+                    this.value = '';
+                    this.required = false;
+                } catch (error) {
+                    console.error('Error adding Pomodoro type:', error);
+                    alert('Error adding new Pomodoro type: ' + error.message);
+                }
+            }
+        });
+    }
+
+    // Add event listeners
+    startBtn.addEventListener('click', startTimer);
+    pauseBtn.addEventListener('click', pauseTimer);
+    resetBtn.addEventListener('click', resetTimer);
+    skipBtn.addEventListener('click', skipToBreak);
+    stopBtn.addEventListener('click', stopTimer);
+
+    // Initialize timer display
+    updateTimerDisplay();
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Remove duplicate form event listener code and keep only the first one
+    
+    // Handle work log actions
+    document.addEventListener('click', async function(e) {
+        const target = e.target;
+        const row = target.closest('tr');
+        if (!row) return;
+
+        const logId = row.getAttribute('data-log-id');
+        if (!logId) return;
+
+        // Get the CSRF token from meta tag
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+        if (target.classList.contains('edit-btn')) {
+            // Switch to edit mode
+            row.querySelectorAll('.display-text').forEach(el => el.classList.add('d-none'));
+            row.querySelectorAll('.edit-input').forEach(el => el.classList.remove('d-none'));
+            row.querySelector('.edit-btn').classList.add('d-none');
+            row.querySelector('.save-btn').classList.remove('d-none');
+            row.querySelector('.cancel-btn').classList.remove('d-none');
+            row.querySelector('.delete-btn').classList.add('d-none');
+
+            // Handle project selection in edit mode
+            const projectSelect = row.querySelector('.project-cell .edit-input');
+            const newProjectInput = row.querySelector('.new-project-name');
+            if (projectSelect && newProjectInput) {
+                projectSelect.addEventListener('change', function() {
+                    if (this.value === 'new') {
+                        newProjectInput.style.display = 'block';
+                    } else {
+                        newProjectInput.style.display = 'none';
+                    }
+                });
+            }
+        }
+
+        if (target.classList.contains('save-btn')) {
+            const projectCell = row.querySelector('.project-cell');
+            const projectSelect = projectCell.querySelector('.edit-input');
+            const newProjectInput = projectCell.querySelector('.new-project-name');
+            let projectValue = projectSelect.value;
+            
+            if (projectValue === 'new') {
+                projectValue = newProjectInput.value.trim();
+                if (!projectValue) {
+                    alert('Please enter a new project name');
+                    return;
+                }
+            }
+
+            const data = {
+                id: logId,
+                project: projectValue,
+                description: row.querySelector('.description-cell .edit-input').value,
+                hours: row.querySelector('.hours-cell .edit-input').value
+            };
+
+            try {
+                const response = await fetch('/update_work_log', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    // Update display values
+                    row.querySelector('.project-cell .display-text').textContent = data.project;
+                    row.querySelector('.description-cell .display-text').textContent = data.description || '-';
+                    row.querySelector('.hours-cell .display-text').textContent = parseFloat(data.hours).toFixed(1);
+
+                    // Reset UI state
+                    exitEditMode(row);
+                } else {
+                    throw new Error(result.error || 'Failed to update work log');
+                }
+            } catch (error) {
+                alert('Error updating work log: ' + error.message);
+            }
+        }
+
+        if (target.classList.contains('cancel-btn')) {
+            exitEditMode(row);
+        }
+
+        if (target.classList.contains('delete-btn')) {
+            if (confirm('Are you sure you want to delete this work log?')) {
+                try {
+                    const response = await fetch('/delete_work_log', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': csrfToken
+                        },
+                        body: JSON.stringify({ id: logId })
+                    });
+
+                    const result = await response.json();
+                    if (result.success) {
+                        row.remove();
+                        alert('Work log deleted successfully');
+                    } else {
+                        throw new Error(result.error || 'Failed to delete work log');
+                    }
+                } catch (error) {
+                    alert('Error deleting work log: ' + error.message);
+                }
+            }
+        }
+    });
+
+    function exitEditMode(row) {
+        row.querySelectorAll('.display-text').forEach(el => el.classList.remove('d-none'));
+        row.querySelectorAll('.edit-input').forEach(el => el.classList.add('d-none'));
+        row.querySelector('.edit-btn').classList.remove('d-none');
+        row.querySelector('.save-btn').classList.add('d-none');
+        row.querySelector('.cancel-btn').classList.add('d-none');
+        row.querySelector('.delete-btn').classList.remove('d-none');
+        
+        const newProjectInput = row.querySelector('.new-project-name');
+        if (newProjectInput) {
+            newProjectInput.style.display = 'none';
+            newProjectInput.value = '';
+        }
+    }
+});
+</script>
+
+<!-- Add this to your scripts section -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Pomodoro Analytics Charts
+    function initPomodoroCharts() {
+        // Type Distribution Chart
+        const typeChart = echarts.init(document.getElementById('pomodoroTypeChart'));
+        const distractionsChart = echarts.init(document.getElementById('distractionsChart'));
+
+        function updatePomodoroCharts() {
+            fetch('/get_pomodoro_analytics')
+                .then(response => response.json())
+                .then(data => {
+                    // Update Type Chart
+                    typeChart.setOption({
+                        title: {
+                            text: 'Pomodoro Types Distribution',
+                            left: 'center'
+                        },
+                        tooltip: {
+                            trigger: 'axis',
+                            axisPointer: {
+                                type: 'shadow'
+                            }
+                        },
+                        legend: {
+                            bottom: '5%'
+                        },
+                        xAxis: {
+                            type: 'category',
+                            data: data.types,
+                            axisLabel: {
+                                rotate: 45
+                            }
+                        },
+                        yAxis: [{
+                            type: 'value',
+                            name: 'Duration (min)',
+                            position: 'left'
+                        }, {
+                            type: 'value',
+                            name: 'Count',
+                            position: 'right'
+                        }],
+                        series: [{
+                            name: 'Total Duration',
+                            type: 'bar',
+                            data: data.durations,
+                            yAxisIndex: 0
+                        }, {
+                            name: 'Session Count',
+                            type: 'line',
+                            data: data.counts,
+                            yAxisIndex: 1
+                        }]
+                    });
+
+                    // Update Distractions Chart
+                    distractionsChart.setOption({
+                        title: {
+                            text: 'Distractions per Session Type',
+                            left: 'center'
+                        },
+                        tooltip: {
+                            trigger: 'axis',
+                            axisPointer: {
+                                type: 'shadow'
+                            }
+                        },
+                        xAxis: {
+                            type: 'category',
+                            data: data.types,
+                            axisLabel: {
+                                rotate: 45
+                            }
+                        },
+                        yAxis: {
+                            type: 'value',
+                            name: 'Avg. Distractions'
+                        },
+                        series: [{
+                            name: 'Average Distractions',
+                            type: 'bar',
+                            data: data.avg_distractions
+                        }]
+                    });
+                })
+                .catch(error => console.error('Error updating Pomodoro charts:', error));
+        }
+
+        // Initial update
+        updatePomodoroCharts();
+
+        // Update every 5 minutes
+        setInterval(updatePomodoroCharts, 300000);
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            typeChart.resize();
+            distractionsChart.resize();
+        });
+    }
+
+    // Initialize charts if elements exist
+    if (document.getElementById('pomodoroTypeChart') && document.getElementById('distractionsChart')) {
+        initPomodoroCharts();
+    }
+});
+</script>
+
+{% endblock %}
+
+

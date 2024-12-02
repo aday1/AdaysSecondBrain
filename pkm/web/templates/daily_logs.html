@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block content %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.css">
+<script src="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.js"></script>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="mb-4">Daily Logs</h1>
+            
+            <form method="POST" action="{{ url_for('daily_logs') }}" class="mb-4">
+                <button type="submit" class="btn btn-primary">Create Today's Log</button>
+            </form>
+            
+            <div class="form-group mb-4">
+                <label for="date-picker" class="form-label">Select Date:</label>
+                <input type="date" 
+                       id="date-picker" 
+                       name="date" 
+                       value="{{ selected_date }}" 
+                       class="form-control" 
+                       style="max-width: 200px;"
+                       onchange="location = this.value ? '/daily_logs?date=' + this.value : '/daily_logs';">
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Buttons -->
+    <div class="row mb-4">
+        <div class="col">
+            <button class="btn btn-secondary" onclick="navigateDate('{{ previous_date }}')">Previous Day</button>
+            <button class="btn btn-secondary" onclick="navigateDate('{{ next_date }}')">Next Day</button>
+        </div>
+    </div>
+
+    <!-- Daily Logs -->
+    <div class="row">
+        <div class="col">
+            {% for log in logs %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h2 class="card-title h5 mb-0">{{ log.date|format_date }}</h2>
+                    </div>
+                    <div class="card-body {% if not log.is_active %}d-none{% endif %} {% if log.date == selected_date %}d-block{% endif %}">
+                        <form method="POST" action="{{ url_for('update_log', date=log.date) }}">
+                            <textarea name="content" class="markdown-editor" rows="3">{{ log.raw_content }}</textarea>
+                            <button type="submit" class="btn btn-success mt-2">Save</button>
+                        </form>
+                    </div>
+                    <div class="card-footer {% if not log.is_active %}d-none{% endif %} {% if log.date == selected_date %}d-block{% endif %}">
+                        <a href="{{ url_for('update_log', date=log.date) }}" class="btn btn-secondary">Edit</a>
+                    </div>
+                </div>
+            {% endfor %}
+            
+            {% if not logs %}
+                <div class="alert alert-info">
+                    No logs found. Create a new log to get started.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize SimpleMDE on all markdown editors
+    document.querySelectorAll('.markdown-editor').forEach(function(textarea) {
+        new SimpleMDE({ 
+            element: textarea,
+            spellChecker: true,
+            autofocus: false,
+            placeholder: textarea.placeholder,
+            toolbar: ["bold", "italic", "heading", "|", 
+                     "quote", "unordered-list", "ordered-list", "|",
+                     "link", "image", "|",
+                     "preview", "side-by-side", "fullscreen",
+            ],
+            renderingConfig: {
+                singleLineBreaks: false,
+                codeSyntaxHighlighting: true,
+            }
+        });
+    });
+
+    // Roll up non-active days
+    document.querySelectorAll('.card').forEach(card => {
+        const header = card.querySelector('.card-header');
+        const body = card.querySelector('.card-body');
+        const footer = card.querySelector('.card-footer');
+        
+        header.addEventListener('click', () => {
+            body.classList.toggle('d-none');
+            footer.classList.toggle('d-none');
+        });
+    });
+});
+
+function navigateDate(date) {
+    location.href = '/daily_logs?date=' + date;
+}
+</script>
+{% endblock %}

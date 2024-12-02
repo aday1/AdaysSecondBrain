@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Goals</h1>
+
+    <!-- Add New Goal Form -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Add New Goal</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('goals') }}">
+                <div class="mb-3">
+                    <label for="goal" class="form-label">Goal Name</label>
+                    <input type="text" class="form-control" id="goal" name="title" placeholder="Enter new goal name" required>
+                </div>
+                <div class="mb-3">
+                    <label for="notes" class="form-label">Notes</label>
+                    <textarea class="form-control" id="notes" name="notes" rows="3" placeholder="Enter notes about this goal"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="completion" class="form-label">Initial Completion Percentage: <span id="completionValue">0</span>%</label>
+                    <input type="range" class="form-range" id="completion" name="completion" min="0" max="100" value="0">
+                </div>
+                <button type="submit" class="btn btn-primary">Add Goal</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Goals List -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Your Goals</h5>
+        </div>
+        <div class="card-body">
+            {% if goals %}
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Goal</th>
+                            <th>Progress</th>
+                            <th>Notes</th>
+                            <th>Progress History</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for goal in goals %}
+                        <tr data-goal-id="{{ goal.id }}">
+                            <td>{{ goal.title }}</td>
+                            <td style="width: 250px;">
+                                <label class="form-label mb-0">Progress: <span class="completion-value">{{ goal.completion }}%</span></label>
+                                <input type="range" class="form-range completion-slider" 
+                                       value="{{ goal.completion }}" 
+                                       min="0" max="100"
+                                       data-goal-name="{{ goal.title }}">
+                            </td>
+                            <td>
+                                <div class="notes-display">{{ goal.notes }}</div>
+                                <textarea class="form-control notes-editor" style="display: none;">{{ goal.notes }}</textarea>
+                                <button class="btn btn-sm btn-outline-primary edit-notes mt-1">Edit Notes</button>
+                            </td>
+                            <td style="width: 300px;">
+                                <canvas class="progress-history-chart" data-goal-id="{{ goal.id }}"></canvas>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">
+                No goals found. Add your first goal using the form above.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initial completion value display
+    const completionInput = document.getElementById('completion');
+    const completionValue = document.getElementById('completionValue');
+    completionInput.addEventListener('input', function() {
+        completionValue.textContent = this.value;
+    });
+
+    // Handle completion sliders
+    document.querySelectorAll('.completion-slider').forEach(slider => {
+        slider.addEventListener('change', function() {
+            const goalName = this.dataset.goalName;
+            const completion = this.value;
+            const valueDisplay = this.parentElement.querySelector('.completion-value');
+            valueDisplay.textContent = completion + '%';
+
+            fetch(`/update_goal_completion/${goalName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    completion: completion
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'completed') {
+                    this.closest('tr').classList.add('table-success');
+                }
+                // Update chart after saving new progress
+                updateProgressChart(this.closest('tr').dataset.goalId);
+            });
+        });
+    });
+
+    // Initial load of progress charts
+    function updateProgressChart(goalId) {
+        fetch(`/get_goal_progress/${goalId}`)
+            .then(response => response.json())
+            .then(data => {
+                const canvas = document.querySelector(`.progress-history-chart[data-goal-id="${goalId}"]`);
+                const ctx = canvas.getContext('2d');
+                
+                // Destroy existing chart if it exists
+                if (canvas.chart) {
+                    canvas.chart.destroy();
+                }
+
+                // Create new chart
+                canvas.chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.dates,
+                        datasets: [{
+                            label: 'Progress',
+                            data: data.progress,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100
+                            }
+                        }
+                    }
+                });
+            });
+    }
+
+    // Initialize all progress charts
+    document.querySelectorAll('.progress-history-chart').forEach(canvas => {
+        updateProgressChart(canvas.dataset.goalId);
+    });
+
+    // Handle notes editing
+    document.querySelectorAll('.edit-notes').forEach(button => {
+        button.addEventListener('click', function() {
+            const cell = this.parentElement;
+            const display = cell.querySelector('.notes-display');
+            const editor = cell.querySelector('.notes-editor');
+            
+            if (display.style.display !== 'none') {
+                display.style.display = 'none';
+                editor.style.display = 'block';
+                this.textContent = 'Save Notes';
+            } else {
+                const goalName = this.closest('tr').querySelector('.completion-slider').dataset.goalName;
+                fetch(`/update_goal_notes/${goalName}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        notes: editor.value
+                    })
+                })
+                .then(() => {
+                    display.textContent = editor.value;
+                    display.style.display = 'block';
+                    editor.style.display = 'none';
+                    this.textContent = 'Edit Notes';
+                });
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

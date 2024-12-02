@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4">Gratitude Journal</h1>
+
+    <form action="{{ url_for('save_gratitude') }}" method="POST">
+        <div class="mb-3">
+            <label for="gratitude_content" class="form-label">What are you grateful for?</label>
+            <textarea class="form-control" id="gratitude_content" name="gratitude_content" rows="3" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Save Gratitude</button>
+    </form>
+
+    <h2 class="mt-4">Previous Entries</h2>
+    {% if gratitude_logs %}
+        <ul class="list-group">
+            {% for log in gratitude_logs %}
+                <li class="list-group-item">
+                    <strong>{{ log[1] }}</strong>: {{ log[0] }}
+                    <form action="{{ url_for('edit_gratitude', id=log[2]) }}" method="GET" style="display:inline;">
+                        <button type="submit" class="btn btn-warning btn-sm">Edit</button>
+                    </form>
+                    <form action="{{ url_for('delete_gratitude', id=log[2]) }}" method="POST" style="display:inline;">
+                        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                    </form>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No gratitude entries found.</p>
+    {% endif %}
+</div>
+{% endblock %}

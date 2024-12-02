@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Include Sortable.js for drag-and-drop functionality -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
+
+<div class="container-fluid">
+    <h1 class="mb-4">Personal Knowledge Management Dashboard</h1>
+    
+    <div id="sortable-container">
+        <!-- Today's Metrics -->
+        <div class="sortable-item mb-4" data-id="metrics-section">
+            <div class="card">
+                <div class="card-header grabbable">
+                    <h5 class="card-title mb-0">Today's Metrics</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('metrics') }}">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="mood" class="form-label">Mood: <span id="moodValue">5</span> <span id="moodEmoji">😐</span></label>
+                                    <input type="range" class="form-range" id="mood" name="mood" min="1" max="10" value="5" 
+                                           oninput="updateMoodEmoji(this.value)">
+                                    <div class="d-flex justify-content-between">
+                                        <small>😫</small>
+                                        <small>😐</small>
+                                        <small>😊</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="energy" class="form-label">Energy: <span id="energyValue">5</span> <span id="energyEmoji">⚡</span></label>
+                                    <input type="range" class="form-range" id="energy" name="energy" min="1" max="10" value="5" 
+                                           oninput="updateEnergyEmoji(this.value)">
+                                    <div class="d-flex justify-content-between">
+                                        <small>🔋</small>
+                                        <small>⚡</small>
+                                        <small>⚡⚡</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="sleep" class="form-label">Sleep Hours: <span id="sleepValue">8</span> <span id="sleepEmoji">😴</span></label>
+                                    <input type="range" class="form-range" id="sleep" name="sleep" min="0" max="12" step="0.5" value="8" 
+                                           oninput="updateSleepEmoji(this.value)">
+                                    <div class="d-flex justify-content-between">
+                                        <small>😫</small>
+                                        <small>😴</small>
+                                        <small>🛌</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Log Metrics</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sub Daily Mood Tracker -->
+        <div class="sortable-item mb-4" data-id="sub-daily-section">
+            <div class="card">
+                <div class="card-header grabbable">
+                    <h5 class="card-title mb-0">Sub Daily Mood Tracker</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('sub_daily_mood') }}">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="sub_mood" class="form-label">Current Mood: <span id="subMoodValue">5</span> <span id="subMoodEmoji">😐</span></label>
+                                    <input type="range" class="form-range" id="sub_mood" name="sub_mood" min="1" max="10" value="5" 
+                                           oninput="updateSubMoodEmoji(this.value)">
+                                    <div class="d-flex justify-content-between">
+                                        <small>😫</small>
+                                        <small>😐</small>
+                                        <small>😊</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="sub_energy" class="form-label">Current Energy: <span id="subEnergyValue">5</span> <span id="subEnergyEmoji">⚡</span></label>
+                                    <input type="range" class="form-range" id="sub_energy" name="sub_energy" min="1" max="10" value="5" 
+                                           oninput="updateSubEnergyEmoji(this.value)">
+                                    <div class="d-flex justify-content-between">
+                                        <small>🔋</small>
+                                        <small>⚡</small>
+                                        <small>⚡⚡</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="sub_notes" class="form-label">Thoughts/Notes</label>
+                            <textarea class="form-control" id="sub_notes" name="sub_notes" rows="3" placeholder="What's on your mind? How are you feeling?"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Log Current State</button>
+                    </form>
+
+                    <!-- Today's Sub Daily Entries -->
+                    {% if sub_daily_logs %}
+                    <div class="mt-4">
+                        <h6>Today's Entries</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Mood</th>
+                                        <th>Energy</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for log in sub_daily_logs %}
+                                    <tr>
+                                        <td>{{ log.time }}</td>
+                                        <td>{{ log.mood }} {{ log.mood_emoji }}</td>
+                                        <td>{{ log.energy }} {{ log.energy_emoji }}</td>
+                                        <td>{{ log.notes }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Work Log -->
+        <div class="sortable-item mb-4" data-id="work-section">
+            <div class="card">
+                <div class="card-header grabbable">
+                    <h5 class="card-title mb-0">Quick Work Log</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('work') }}">
+                        <div class="mb-3">
+                            <label for="project" class="form-label">Project</label>
+                            <select class="form-select" id="project" name="project" required>
+                                <option value="">Select Project</option>
+                                {% for project in projects %}
+                                <option value="{{ project }}">{{ project }}</option>
+                                {% endfor %}
+                                <option value="new">+ Add New Project</option>
+                            </select>
+                            <input type="text" class="form-control mt-2 d-none" id="new-project" placeholder="Enter new project name">
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Log Work</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Habit Log -->
+        <div class="sortable-item mb-4" data-id="habits-section">
+            <div class="card">
+                <div class="card-header grabbable">
+                    <h5 class="card-title mb-0">Quick Habit Log</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('habits') }}">
+                        <div class="mb-3">
+                            <label for="habit" class="form-label">Habit</label>
+                            <select class="form-select" id="habit" name="habit" required>
+                                <option value="">Select Habit</option>
+                                {% for habit in habits %}
+                                <option value="{{ habit }}">{{ habit }}</option>
+                                {% endfor %}
+                                <option value="new">+ Add New Habit</option>
+                            </select>
+                            <input type="text" class="form-control mt-2 d-none" id="new-habit" placeholder="Enter new habit name">
+                        </div>
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Log Habit</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Alcohol Log -->
+        <div class="sortable-item mb-4" data-id="alcohol-section">
+            <div class="card">
+                <div class="card-header grabbable">
+                    <h5 class="card-title mb-0">Quick Alcohol Log</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('alcohol') }}">
+                        <div class="mb-3">
+                            <label for="drink_type" class="form-label">Drink Type</label>
+                            <select class="form-select" id="drink_type" name="drink_type" required>
+                                <option value="">Select a drink type</option>
+                                {% for drink_type in drink_types %}
+                                <option value="{{ drink_type }}">{{ drink_type }}</option>
+                                {% endfor %}
+                                <option value="new">+ Add New Drink Type</option>
+                            </select>
+                            <input type="text" class="form-control mt-2 d-none" id="new-drink" placeholder="Enter new drink type">
+                        </div>
+                        <div class="mb-3">
+                            <label for="units" class="form-label">Standard Drinks</label>
+                            <input type="number" class="form-control" id="units" name="units" step="0.1" required>
+                            <small class="form-text text-muted">
+                                Australian Standard Drinks Guide:<br>
+                                • Full Strength Beer Can (375ml, 4.8%) = 1.4 drinks<br>
+                                • Wine Glass (150ml, 13%) = 1.5 drinks<br>
+                                • Spirit Shot (30ml, 40%) = 0.95 drinks<br>
+                                • Pre-mix Can (375ml, 5%) = 1.5 drinks
+                            </small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Log Alcohol</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Create Daily Log Button -->
+        <div class="sortable-item mb-4" data-id="daily-log-section">
+            <div class="card">
+                <div class="card-header grabbable">
+                    <h5 class="card-title mb-0">Daily Log Actions</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('daily_logs') }}" class="d-inline">
+                        <button type="submit" class="btn btn-success w-100">Create Today's Log</button>
+                    </form>
+                    <a href="{{ url_for('daily_logs') }}" class="btn btn-info w-100">View Recent Logs</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+#sortable-container {
+    min-height: 50px;
+    padding: 10px;
+}
+.sortable-item {
+    margin-bottom: 20px;
+    transition: transform 0.2s ease;
+}
+.sortable-item.sortable-ghost {
+    opacity: 0.4;
+}
+.sortable-item.sortable-chosen {
+    background-color: #f8f9fa;
+}
+.grabbable {
+    cursor: grab;
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-bottom: 2px solid #dee2e6;
+}
+.grabbable:active {
+    cursor: grabbing;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Sortable for drag-and-drop
+    new Sortable(document.getElementById('sortable-container'), {
+        animation: 150,
+        handle: '.grabbable',
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        dragClass: 'sortable-drag',
+        onEnd: function(evt) {
+            // Save the new order if needed
+            const order = Array.from(evt.to.children).map(item => item.dataset.id);
+            console.log('New order:', order);
+            // You could save this order to localStorage or send to server
+            localStorage.setItem('dashboardOrder', JSON.stringify(order));
+        }
+    });
+
+    // Load saved order if exists
+    const savedOrder = localStorage.getItem('dashboardOrder');
+    if (savedOrder) {
+        const container = document.getElementById('sortable-container');
+        const itemsArray = Array.from(container.children);
+        const orderArray = JSON.parse(savedOrder);
+        
+        // Reorder elements
+        orderArray.forEach(id => {
+            const element = itemsArray.find(item => item.dataset.id === id);
+            if (element) {
+                container.appendChild(element);
+            }
+        });
+    }
+
+    // Handle project dropdown
+    const projectSelect = document.getElementById('project');
+    const newProjectInput = document.getElementById('new-project');
+
+    if (projectSelect) {
+        projectSelect.addEventListener('change', function() {
+            if (this.value === 'new') {
+                newProjectInput.classList.remove('d-none');
+                newProjectInput.required = true;
+            } else {
+                newProjectInput.classList.add('d-none');
+                newProjectInput.required = false;
+            }
+        });
+    }
+
+    // Handle habit dropdown
+    const habitSelect = document.getElementById('habit');
+    const newHabitInput = document.getElementById('new-habit');
+
+    if (habitSelect) {
+        habitSelect.addEventListener('change', function() {
+            if (this.value === 'new') {
+                newHabitInput.classList.remove('d-none');
+                newHabitInput.required = true;
+            } else {
+                newHabitInput.classList.add('d-none');
+                newHabitInput.required = false;
+            }
+        });
+    }
+
+    // Handle drink type dropdown
+    const drinkTypeSelect = document.getElementById('drink_type');
+    const newDrinkInput = document.getElementById('new-drink');
+
+    if (drinkTypeSelect) {
+        drinkTypeSelect.addEventListener('change', function() {
+            if (this.value === 'new') {
+                newDrinkInput.classList.remove('d-none');
+                newDrinkInput.required = true;
+                this.name = ''; // Remove the name attribute so it's not submitted
+            } else {
+                newDrinkInput.classList.add('d-none');
+                newDrinkInput.required = false;
+                this.name = 'drink_type'; // Restore the name attribute
+            }
+        });
+    }
+});
+
+// Emoji update functions for main metrics
+function updateMoodEmoji(value) {
+    document.getElementById('moodValue').textContent = value;
+    const emoji = value <= 3 ? '😫' : value <= 5 ? '😐' : value <= 7 ? '🙂' : '😊';
+    document.getElementById('moodEmoji').textContent = emoji;
+}
+
+function updateEnergyEmoji(value) {
+    document.getElementById('energyValue').textContent = value;
+    const emoji = value <= 3 ? '🔋' : value <= 7 ? '⚡' : '⚡⚡';
+    document.getElementById('energyEmoji').textContent = emoji;
+}
+
+function updateSleepEmoji(value) {
+    document.getElementById('sleepValue').textContent = value;
+    const emoji = value <= 4 ? '😫' : value <= 8 ? '😴' : '🛌';
+    document.getElementById('sleepEmoji').textContent = emoji;
+}
+
+// Emoji update functions for sub daily tracker
+function updateSubMoodEmoji(value) {
+    document.getElementById('subMoodValue').textContent = value;
+    const emoji = value <= 3 ? '😫' : value <= 5 ? '😐' : value <= 7 ? '🙂' : '😊';
+    document.getElementById('subMoodEmoji').textContent = emoji;
+}
+
+function updateSubEnergyEmoji(value) {
+    document.getElementById('subEnergyValue').textContent = value;
+    const emoji = value <= 3 ? '🔋' : value <= 7 ? '⚡' : '⚡⚡';
+    document.getElementById('subEnergyEmoji').textContent = emoji;
+}
+</script>
+{% endblock %}
