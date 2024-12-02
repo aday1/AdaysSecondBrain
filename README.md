@@ -7,6 +7,10 @@ Welcome to what I use as a personal knowledge mental load management tool design
 - **Log Anxiety Data**: I can save anxiety-related metrics such as SUDS score, isolation, unrelenting standards, and other indexes and develop coping strategies.
 - **View Anxiety Logs**: Retrieve and view historical anxiety data in a structured format.
 
+Default Username: admin
+Default Password: admin123
+
+
 ## Installation
 1. Clone the repository:
    ```bash
