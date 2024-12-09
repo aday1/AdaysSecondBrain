@@ -1,0 +1,42 @@
+
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Edit Sleep Log</h1>
+    <form method="POST" action="{{ url_for('edit_sleep', date=sleep_log[0]) }}">
+        <div class="mb-3">
+            <label for="bed_time" class="form-label">Bed Time</label>
+            <input type="time" class="form-control" id="bed_time" name="bed_time" value="{{ sleep_log[3] }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="wake_up_time" class="form-label">Wake Up Time</label>
+            <input type="time" class="form-control" id="wake_up_time" name="wake_up_time" value="{{ sleep_log[4] }}" required>
+        </div>
+        <div class="mb-3">
+            <label for="sleep_quality" class="form-label">Sleep Quality (1-10)</label>
+            <input type="range" class="form-range" id="sleep_quality" name="sleep_quality" min="1" max="10" value="{{ sleep_log[2] }}">
+            <div class="text-center" id="sleepQualityValue">{{ sleep_log[2] }}</div>
+        </div>
+        <div class="mb-3">
+            <label for="sleep_notes" class="form-label">Notes</label>
+            <textarea class="form-control" id="sleep_notes" name="sleep_notes" rows="2">{{ sleep_log[5] }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Update Sleep Log</button>
+        <a href="{{ url_for('sleep_tracking') }}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sleepQualitySlider = document.getElementById('sleep_quality');
+    const sleepQualityValue = document.getElementById('sleepQualityValue');
+
+    if (sleepQualitySlider && sleepQualityValue) {
+        sleepQualitySlider.addEventListener('input', function() {
+            sleepQualityValue.textContent = this.value;
+        });
+    }
+});
+</script>
+{% endblock %}

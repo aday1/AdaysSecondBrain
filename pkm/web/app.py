@@ -576,14 +576,14 @@ def sleep_tracking():
             'quality': [row[2] for row in sleep_data],
             'bedtimes': [row[3] for row in sleep_data],
             'wake_times': [row[4] for row in sleep_data],
-            'notes': [row[5] for row in sleep_data]
+            'notes': [row[5] for row in sleep_data]  # Ensure notes are included
         }
         
-        return render_template('sleep_tracking.html', sleep_data=formatted_data)
+        return render_template('sleep_tracking.html', sleep_data=formatted_data, sleep_logs=sleep_data)
         
     except Exception as e:
         app.logger.error(f'Error fetching sleep data: {str(e)}')
-        return render_template('sleep_tracking.html', error=str(e), sleep_data={'dates': [], 'hours': [], 'quality': [], 'bedtimes': [], 'wake_times': [], 'notes': []})
+        return render_template('sleep_tracking.html', error=str(e), sleep_data={'dates': [], 'hours': [], 'quality': [], 'bedtimes': [], 'wake_times': [], 'notes': []}, sleep_logs=[])
 
 # ...existing code...
 
@@ -678,22 +678,24 @@ def get_sleep_metrics():
 @login_required
 def log_sleep():
     try:
+        sleep_date = request.form.get('sleep_date')
         bedtime = request.form.get('bed_time')
         wake_time = request.form.get('wake_up_time')
         sleep_quality = int(request.form.get('sleep_quality', 0))
         sleep_notes = request.form.get('sleep_notes', '')
 
-        if not all([bedtime, wake_time]):
-            flash('Bedtime and wake time are required.')
+        if not all([sleep_date, bedtime, wake_time]):
+            flash('Date, Bedtime, and Wake time are required.')
             return redirect(url_for('sleep_tracking'))
-        
-        bed_dt = datetime.strptime(f"2000-01-01 {bedtime}", "%Y-%m-%d %H:%M")
-        wake_dt = datetime.strptime(f"2000-01-01 {wake_time}", "%Y-%m-%d %H:%M")
-        
-        if wake_dt < bed_dt:
-            flash('Wake time cannot be earlier than bedtime.')
-            return redirect(url_for('sleep_tracking'))
-        
+
+        # Parse bedtime and wake time with correct dates
+        bed_dt = datetime.strptime(f"{sleep_date} {bedtime}", "%Y-%m-%d %H:%M")
+        wake_dt = datetime.strptime(f"{sleep_date} {wake_time}", "%Y-%m-%d %H:%M")
+
+        # Adjust wake time to the next day if it's earlier than bedtime
+        if wake_dt <= bed_dt:
+            wake_dt += timedelta(days=1)
+
         sleep_hours = (wake_dt - bed_dt).total_seconds() / 3600
 
         conn = db.engine.raw_connection()
@@ -703,20 +705,20 @@ def log_sleep():
             INSERT OR REPLACE INTO daily_metrics (
                 date, sleep_hours, sleep_quality, bedtime, wake_time, sleep_notes
             ) VALUES (
-                date('now'), ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?
             )
-        ''', (sleep_hours, sleep_quality, bedtime, wake_time, sleep_notes))
-        
+        ''', (sleep_date, sleep_hours, sleep_quality, bedtime, wake_time, sleep_notes))
+
         conn.commit()
-        
+
         # Redirect to sleep_tracking after successful insertion
         return redirect(url_for('sleep_tracking'))
-    
+
     except Exception as e:
         app.logger.error(f'Error logging sleep data: {str(e)}')
         flash('Error logging sleep data.')
         return redirect(url_for('sleep_tracking'))
-    
+
     finally:
         if 'conn' in locals():
             cursor.close()
@@ -2309,6 +2311,98 @@ def get_current_datetime():
             'error': str(e),
             'success': False
         }), 500
+
+@app.route('/edit_sleep/<date>', methods=['GET', 'POST'])
+@login_required
+def edit_sleep(date):
+    if request.method == 'POST':
+        try:
+            bedtime = request.form.get('bed_time')
+            wake_time = request.form.get('wake_up_time')
+            sleep_quality = int(request.form.get('sleep_quality', 0))
+            sleep_notes = request.form.get('sleep_notes', '')
+
+            if not all([bedtime, wake_time]):
+                flash('Bedtime and Wake time are required.')
+                return redirect(url_for('sleep_tracking'))
+
+            # Parse bedtime and wake time with correct dates
+            bed_dt = datetime.strptime(f"{date} {bedtime}", "%Y-%m-%d %H:%M")
+            wake_dt = datetime.strptime(f"{date} {wake_time}", "%Y-%m-%d %H:%M")
+
+            # Adjust wake time to the next day if it's earlier than bedtime
+            if wake_dt <= bed_dt:
+                wake_dt += timedelta(days=1)
+
+            sleep_hours = (wake_dt - bed_dt).total_seconds() / 3600
+
+            conn = db.engine.raw_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                UPDATE daily_metrics
+                SET sleep_hours = ?, sleep_quality = ?, bedtime = ?, wake_time = ?, sleep_notes = ?
+                WHERE date = ?
+            ''', (sleep_hours, sleep_quality, bedtime, wake_time, sleep_notes, date))
+
+            conn.commit()
+            flash('Sleep log updated successfully.')
+            return redirect(url_for('sleep_tracking'))
+
+        except Exception as e:
+            app.logger.error(f'Error updating sleep data: {str(e)}')
+            flash('Error updating sleep data.')
+            return redirect(url_for('sleep_tracking'))
+
+        finally:
+            if 'conn' in locals():
+                cursor.close()
+                conn.close()
+    else:
+        try:
+            conn = db.engine.raw_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                SELECT date, sleep_hours, sleep_quality, bedtime, wake_time, sleep_notes
+                FROM daily_metrics
+                WHERE date = ?
+            ''', (date,))
+            sleep_log = cursor.fetchone()
+            conn.close()
+
+            if sleep_log:
+                return render_template('edit_sleep.html', sleep_log=sleep_log)
+            else:
+                flash('Sleep log not found.')
+                return redirect(url_for('sleep_tracking'))
+
+        except Exception as e:
+            app.logger.error(f'Error fetching sleep data: {str(e)}')
+            flash('Error fetching sleep data.')
+            return redirect(url_for('sleep_tracking'))
+
+@app.route('/delete_sleep/<date>', methods=['POST'])
+@login_required
+def delete_sleep(date):
+    try:
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('DELETE FROM daily_metrics WHERE date = ?', (date,))
+        conn.commit()
+        flash('Sleep log deleted successfully.')
+        return redirect(url_for('sleep_tracking'))
+
+    except Exception as e:
+        app.logger.error(f'Error deleting sleep data: {str(e)}')
+        flash('Error deleting sleep data.')
+        return redirect(url_for('sleep_tracking'))
+
+    finally:
+        if 'conn' in locals():
+            cursor.close()
+            conn.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PKM Web Interface')

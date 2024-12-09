@@ -77,17 +77,24 @@
                                     <th>Sleep Hours</th>
                                     <th>Quality</th>
                                     <th>Notes</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for log in sleep_logs %}
                                 <tr>
-                                    <td>{{ log.date }}</td>
-                                    <td>{{ log.bed_time }}</td>
-                                    <td>{{ log.wake_time }}</td>
-                                    <td>{{ log.sleep_hours }}</td>
-                                    <td>{{ log.sleep_quality }}</td>
-                                    <td>{{ log.sleep_notes }}</td>
+                                    <td>{{ log[0] }}</td>
+                                    <td>{{ log[3] }}</td>
+                                    <td>{{ log[4] }}</td>
+                                    <td>{{ log[1] }}</td>
+                                    <td>{{ log[2] }}</td>
+                                    <td>{{ log[5] }}</td>
+                                    <td>
+                                        <a href="{{ url_for('edit_sleep', date=log[0]) }}" class="btn btn-sm btn-warning">Edit</a>
+                                        <form action="{{ url_for('delete_sleep', date=log[0]) }}" method="POST" style="display:inline;">
+                                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this log?');">Delete</button>
+                                        </form>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -209,7 +216,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Set current time as default
     const bedTimeInput = document.getElementById('bed_time');
     const wakeTimeInput = document.getElementById('wake_up_time');
-    bedTimeInput.value = new Date().toLocaleTimeString('en-GB').slice(0, 5);
+    bedTimeInput.value = new Date(new Date().setDate(new Date().getDate() - 1)).toLocaleTimeString('en-GB').slice(0, 5);
     wakeTimeInput.value = new Date().toLocaleTimeString('en-GB').slice(0, 5);
 
     // Add date handling code
@@ -223,7 +230,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Set current time in time input when page loads
-    document.getElementById('bed_time').value = new Date().toLocaleTimeString('en-GB').slice(0, 5);
+    document.getElementById('bed_time').value = new Date(new Date().setDate(new Date().getDate() - 1)).toLocaleTimeString('en-GB').slice(0, 5);
     document.getElementById('wake_up_time').value = new Date().toLocaleTimeString('en-GB').slice(0, 5);
 
     // Function to set date to today
@@ -240,7 +247,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Update time to current when form is about to be submitted
     form.addEventListener('submit', function() {
-        document.getElementById('bed_time').value = new Date().toLocaleTimeString('en-GB').slice(0, 5);
+        document.getElementById('bed_time').value = new Date(new Date().setDate(new Date().getDate() - 1)).toLocaleTimeString('en-GB').slice(0, 5);
         document.getElementById('wake_up_time').value = new Date().toLocaleTimeString('en-GB').slice(0, 5);
     });
 
