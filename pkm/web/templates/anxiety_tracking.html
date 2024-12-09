@@ -5,8 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Anxiety Tracking</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
         body[data-bs-theme="dark"] {
             background-color: #212529;
@@ -52,7 +57,7 @@
             position: relative;
         }
 
-        #anxietyChart, #copingChart {
+        #sudsChart, #anxietyFactorsChart {
             width: 100% !important;
             height: 400px !important;
             position: relative;
@@ -63,10 +68,6 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment"></script>
 </head>
 <body>
     {% extends 'base.html' %}
@@ -220,28 +221,25 @@
                 </div>
             </div>
         </form>
-        <h2 class="mt-5">Anxiety Graph</h2>
+        <h2 class="mt-5">Anxiety Graphs</h2>
         <div class="row mt-5">
             <div class="col-12">
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="card-title mb-0">Anxiety Metrics Over Time</h5>
+                        <h5 class="card-title mb-0">SUDS Over Time</h5>
                     </div>
                     <div class="card-body chart-container">
-                        <div id="anxietyChart"></div>
+                        <div id="sudsChart"></div>
                     </div>
                 </div>
             </div>
-        </div>
-
-        <div class="row mt-4">
-            <div class="col-12">
+            <div class="col-12 mt-4">
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="card-title mb-0">Coping Strategies Effectiveness</h5>
+                        <h5 class="card-title mb-0">Anxiety Factors & Coping Scores Over Time</h5>
                     </div>
                     <div class="card-body chart-container">
-                        <div id="copingChart"></div>
+                        <div id="anxietyFactorsChart"></div>
                     </div>
                 </div>
             </div>
@@ -250,7 +248,7 @@
         <div class="card">
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-hover">
+                    <table class="table table-hover" id="anxietyLogsTable">
                         <thead>
                             <tr>
                                 <th>Date/Time</th>
@@ -260,13 +258,15 @@
                                 <th>Self Control</th>
                                 <th>Subjugation</th>
                                 <th>Negativity</th>
+                                <th>Unrelenting Standards</th>
                                 <th>Trigger</th>
                                 <th>Strategy</th>
                                 <th>Effectiveness</th>
+                                <th>Notes</th>
                             </tr>
                         </thead>
-                        <tbody id="anxietyLogsTableBody">
-                            <!-- Logs will be populated here -->
+                        <tbody>
+                            <!-- Data will be populated by DataTables -->
                         </tbody>
                     </table>
                 </div>
@@ -290,7 +290,7 @@
                 <li><strong>9/10 – Near Panic:</strong> Safe space retreat, emergency breathing kit, crisis contacts</li>
                 <li><strong>10/10 – Panic Attack:</strong> Emergency response plan, medication if prescribed, immediate support person</li>
             </ul>
-            <div class="alert alert-info mt-3">
+            <div class="resource-box">
                 <strong>Remember:</strong> 
                 <ul>
                     <li>Below SUDS 5: Focus on thought patterns and cognitive restructuring</li>
@@ -536,7 +536,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 alert('Anxiety data saved successfully!');
                 anxietyForm.reset();
-                await updateData();
+                $('#anxietyLogsTable').DataTable().ajax.reload(); // Reload table data
+                updateCharts(); // Update the charts with new data
             } catch (error) {
                 console.error('Error saving data:', error);
                 alert('Error saving data: ' + error.message);
@@ -548,154 +549,106 @@ document.addEventListener('DOMContentLoaded', function() {
     syncDateTime(); // Set current date/time on load
     loadTriggersAndStrategies(); // Load dropdown options
     
-    // Initialize charts
-    const anxietyChartCtx = document.getElementById('anxietyChart').getContext('2d');
-    const copingChartCtx = document.getElementById('copingChart').getContext('2d');
+    // Initialize DataTables
+    $('#anxietyLogsTable').DataTable({
+        ajax: {
+            url: '/get_anxiety_data',
+            dataSrc: 'logs'
+        },
+        columns: [
+            { data: 'timestamp' },
+            { data: 'suds' },
+            { data: 'duration' },
+            { data: 'social' },
+            { data: 'control' },
+            { data: 'subjugation' },
+            { data: 'negativity' },
+            { data: 'standards' },
+            { data: 'trigger' },
+            { data: 'strategy' },
+            { data: 'effectiveness' },
+            { data: 'notes' }
+        ]
+    });
 
-    let anxietyChart, copingChart;
-
-    function updateData() {
+    function updateCharts() {
         fetch('/get_anxiety_data')
             .then(response => response.json())
             .then(data => {
-                if (anxietyChart) {
-                    anxietyChart.data.labels = data.timestamps;
-                    anxietyChart.data.datasets[0].data = data.suds;
-                    anxietyChart.data.datasets[1].data = data.social;
-                    anxietyChart.data.datasets[2].data = data.control;
-                    anxietyChart.data.datasets[3].data = data.subjugation;
-                    anxietyChart.data.datasets[4].data = data.negativity;
-                    anxietyChart.data.datasets[5].data = data.standards;
-                    anxietyChart.update();
-                } else {
-                    anxietyChart = new Chart(anxietyChartCtx, {
-                        type: 'line',
-                        data: {
-                            labels: data.timestamps,
-                            datasets: [
-                                {
-                                    label: 'SUDS',
-                                    data: data.suds,
-                                    borderColor: '#FF6384',
-                                    fill: false
-                                },
-                                {
-                                    label: 'Social',
-                                    data: data.social,
-                                    borderColor: '#36A2EB',
-                                    fill: false
-                                },
-                                {
-                                    label: 'Control',
-                                    data: data.control,
-                                    borderColor: '#FFCE56',
-                                    fill: false
-                                },
-                                {
-                                    label: 'Subjugation',
-                                    data: data.subjugation,
-                                    borderColor: '#4BC0C0',
-                                    fill: false
-                                },
-                                {
-                                    label: 'Negativity',
-                                    data: data.negativity,
-                                    borderColor: '#9966FF',
-                                    fill: false
-                                },
-                                {
-                                    label: 'Standards',
-                                    data: data.standards,
-                                    borderColor: '#FF9F40',
-                                    fill: false
-                                }
-                            ]
-                        },
-                        options: {
-                            responsive: true,
-                            scales: {
-                                x: {
-                                    type: 'time',
-                                    time: {
-                                        unit: 'day'
-                                    }
-                                },
-                                y: {
-                                    beginAtZero: true
-                                }
-                            }
-                        }
-                    });
-                }
+                console.log('Fetched chart data:', data); // Debugging statement
 
-                const copingData = data.logs.reduce((acc, log) => {
-                    if (!acc[log.strategy]) {
-                        acc[log.strategy] = {
-                            effectiveness: [],
-                            count: 0
-                        };
+                // SUDS Chart
+                const sudsTrace = {
+                    x: data.timestamps,
+                    y: data.suds,
+                    mode: 'lines+markers',
+                    name: 'SUDS',
+                    line: { color: 'rgba(255, 99, 132, 1)' }
+                };
+
+                const sudsLayout = {
+                    title: 'SUDS Over Time',
+                    xaxis: { title: 'Date' },
+                    yaxis: { title: 'SUDS Score', range: [0, 10] },
+                    margin: { t: 50, r: 30, b: 50, l: 50 },
+                    hovermode: 'closest'
+                };
+
+                Plotly.newPlot('sudsChart', [sudsTrace], sudsLayout);
+
+                // Anxiety Factors & Coping Scores Chart
+                const anxietyFactorsTraces = [
+                    {
+                        x: data.timestamps,
+                        y: data.social,
+                        mode: 'lines+markers',
+                        name: 'Social Isolation',
+                        line: { color: 'rgba(54, 162, 235, 1)' }
+                    },
+                    {
+                        x: data.timestamps,
+                        y: data.control,
+                        mode: 'lines+markers',
+                        name: 'Insufficient Self-Control',
+                        line: { color: 'rgba(75, 192, 192, 1)' }
+                    },
+                    {
+                        x: data.timestamps,
+                        y: data.subjugation,
+                        mode: 'lines+markers',
+                        name: 'Subjugation',
+                        line: { color: 'rgba(153, 102, 255, 1)' }
+                    },
+                    {
+                        x: data.timestamps,
+                        y: data.negativity,
+                        mode: 'lines+markers',
+                        name: 'Negativity',
+                        line: { color: 'rgba(255, 159, 64, 1)' }
+                    },
+                    {
+                        x: data.timestamps,
+                        y: data.standards,
+                        mode: 'lines+markers',
+                        name: 'Unrelenting Standards',
+                        line: { color: 'rgba(255, 206, 86, 1)' }
                     }
-                    acc[log.strategy].effectiveness.push(log.effectiveness);
-                    acc[log.strategy].count++;
-                    return acc;
-                }, {});
+                ];
 
-                const strategies = Object.keys(copingData);
-                if (copingChart) {
-                    copingChart.data.labels = strategies;
-                    copingChart.data.datasets[0].data = strategies.map(s => copingData[s].effectiveness.reduce((a, b) => a + b, 0) / copingData[s].count);
-                    copingChart.data.datasets[1].data = strategies.map(s => copingData[s].count);
-                    copingChart.update();
-                } else {
-                    copingChart = new Chart(copingChartCtx, {
-                        type: 'bar',
-                        data: {
-                            labels: strategies,
-                            datasets: [
-                                {
-                                    label: 'Avg Effectiveness',
-                                    data: strategies.map(s => copingData[s].effectiveness.reduce((a, b) => a + b, 0) / copingData[s].count),
-                                    backgroundColor: '#5470c6'
-                                },
-                                {
-                                    label: 'Usage Count',
-                                    data: strategies.map(s => copingData[s].count),
-                                    backgroundColor: '#91cc75'
-                                }
-                            ]
-                        },
-                        options: {
-                            responsive: true,
-                            scales: {
-                                y: {
-                                    beginAtZero: true
-                                }
-                            }
-                        }
-                    });
-                }
+                const anxietyFactorsLayout = {
+                    title: 'Anxiety Factors & Coping Scores Over Time',
+                    xaxis: { title: 'Date' },
+                    yaxis: { title: 'Score', range: [0, 10] },
+                    margin: { t: 50, r: 30, b: 50, l: 50 },
+                    hovermode: 'closest'
+                };
+
+                Plotly.newPlot('anxietyFactorsChart', anxietyFactorsTraces, anxietyFactorsLayout);
             })
-            .catch(error => console.error('Error updating charts:', error));
+            .catch(error => console.error('Error fetching anxiety data:', error));
     }
 
-    updateData();
-    setInterval(updateData, 300000);
-
-    // Update slider emoji displays
-    document.querySelectorAll('.form-range').forEach(slider => {
-        const display = document.getElementById(slider.id + 'Display');
-        if (display) {
-            slider.addEventListener('input', function() {
-                display.textContent = this.value + ' ' + getEmojiForScore(this.value);
-            });
-        }
-    });
-
-    // Initial update
-    updateData();
-
-    // Update periodically
-    setInterval(updateData, 300000); // Update every 5 minutes
+    updateCharts(); // Initial chart update
 });
 </script>
     {% endblock %}

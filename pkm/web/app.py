@@ -1501,23 +1501,26 @@ def get_anxiety_data():
             data['subjugation'].append(log[5])
             data['negativity'].append(log[6])
             data['standards'].append(log[7])
-            
             data['logs'].append({
                 'timestamp': timestamp,
                 'suds': log[2],
-                'trigger': log[9] or 'No trigger specified',
-                'strategy': log[10] or 'No strategy specified',
+                'social': log[3],
+                'control': log[4],
+                'subjugation': log[5],
+                'negativity': log[6],
+                'standards': log[7],
                 'effectiveness': log[8],
+                'trigger': log[9],
+                'strategy': log[10],
                 'duration': log[11],
-                'notes': log[12] or ''
+                'notes': log[12]
             })
         
+        conn.close()
         return jsonify(data)
     except Exception as e:
         app.logger.error(f'Error fetching anxiety data: {str(e)}')
         return jsonify({'error': str(e)}), 500
-    finally:
-        conn.close()
 
 # ...existing code...
 @app.errorhandler(404)
