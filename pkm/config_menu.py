@@ -2,6 +2,7 @@ import curses
 import os
 import subprocess
 import json
+import sqlite3
 from .themes import ThemeManager
 
 class ConfigMenu:
@@ -126,12 +127,51 @@ class ConfigMenu:
                 new_port += chr(key)
                 cursor_pos += 1
 
+    def change_password(self):
+        import getpass
+        import sqlite3
+
+        # Connect to the database
+        db_path = os.path.join(os.path.dirname(__file__), 'db', 'pkm.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # List existing users
+        cursor.execute("SELECT username FROM users;")
+        users = cursor.fetchall()
+        if not users:
+            print("No users found in the database.")
+            return
+
+        # Use gum to select a user
+        usernames = [user[0] for user in users]
+        username = gum.choose(usernames)
+        if not username:
+            print("No user selected.")
+            return
+
+        # Prompt for new password
+        user_password = getpass.getpass(f"Enter new password for {username}: ")
+        confirm_password = getpass.getpass(f"Confirm new password for {username}: ")
+        if user_password != confirm_password:
+            print("Passwords do not match.")
+            return
+
+        # Call the change password script
+        import subprocess
+        result = subprocess.run(["python3", "-m", "pkm.change_password", "--user", username, "--password", user_password])
+        if result.returncode == 0:
+            print(f"Password for user {username} updated successfully.")
+        else:
+            print(f"Failed to update password for user {username}.")
+
     def web_interface_menu(self, stdscr):
         """Display web interface settings menu"""
         menu_items = [
             "Start Web Server",
             "Stop Web Server",
             "Configure Port",
+            "Change password",
             "Back to Main Menu"
         ]
         current_selection = 0
@@ -177,6 +217,8 @@ class ConfigMenu:
                     stdscr.getch()
                 elif current_selection == 2:  # Configure Port
                     self.configure_port(stdscr)
+                elif current_selection == 3:  # Change password
+                    self.change_password()
 
     def database_menu(self, stdscr):
         """Display database settings menu"""

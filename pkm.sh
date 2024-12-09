@@ -50,6 +50,14 @@ wait_for_key() {
     read -p "Press Enter to continue..."
 }
 
+# Ensure bcrypt is installed
+ensure_bcrypt() {
+    if ! python3 -c "import bcrypt" &> /dev/null; then
+        echo "Installing bcrypt..."
+        pip install bcrypt
+    fi
+}
+
 # Check if virtual environment exists
 if [ ! -d "pkm_venv" ]; then
     display_error "Virtual environment not found. Please run install.sh first."
@@ -64,6 +72,9 @@ if [ ! -f "$VENV_ACTIVATE" ]; then
 fi
 
 source "$VENV_ACTIVATE"
+
+# Ensure bcrypt is installed
+ensure_bcrypt
 
 # Database paths
 DB_PATH="pkm/db/pkm.db"
@@ -91,6 +102,7 @@ show_help() {
     $EMOJI_BACKUP backup-md     Create a backup of markdown files
     $EMOJI_RESTORE restore-md    Restore markdown files from backup
     $EMOJI_HELP help          Show this help message
+    $EMOJI_CONFIG change-password  Change a user's password
 
     No option will start the menu interface"
 }
@@ -400,6 +412,71 @@ check_flask_processes() {
     fi
 }
 
+# Function to change password
+change_password() {
+    CONFIG_PATH="pkm/web/config.json"
+    if [ ! -f "$CONFIG_PATH" ]; then
+        display_error "config.json not found."
+        exit 1
+    fi
+
+    # Load the current config
+    CONFIG=$(python3 -c "
+import json
+config_path = '$CONFIG_PATH'
+with open(config_path, 'r') as f:
+    config = json.load(f)
+print(json.dumps(config))
+")
+    if [ $? -ne 0 ]; then
+        display_error "Failed to load config.json."
+        exit 1
+    fi
+
+    # Extract the current username
+    USERNAME=$(echo "$CONFIG" | python3 -c "import sys, json; print(json.load(sys.stdin)['username'])")
+
+    read -sp "Enter new password for $USERNAME: " USER_PASSWORD
+    echo
+    read -sp "Confirm new password for $USERNAME: " CONFIRM_PASSWORD
+    echo
+    if [ "$USER_PASSWORD" != "$CONFIRM_PASSWORD" ]; then
+        display_error "Passwords do not match."
+        exit 1
+    fi
+
+    # Update password_hash in config.json using werkzeug.security.generate_password_hash
+    echo "Updating password_hash for user $USERNAME in config.json"
+    python3 -c "
+import json
+from werkzeug.security import generate_password_hash
+
+config_path = '$CONFIG_PATH'
+username = '$USERNAME'
+password = '$USER_PASSWORD'
+
+with open(config_path, 'r') as f:
+    config = json.load(f)
+
+config['password_hash'] = generate_password_hash(password)
+
+with open(config_path, 'w') as f:
+    json.dump(config, f, indent=4)
+"
+    if [ $? -eq 0 ]; then
+        display_success "Password_hash for user $USERNAME updated successfully in config.json."
+    else
+        display_error "Failed to update password_hash for user $USERNAME in config.json."
+        exit 1
+    fi
+}
+
+# Function to show tables in the database
+show_tables() {
+    echo "Tables in the database:"
+    sqlite3 "$DB_PATH" ".tables"
+}
+
 # Install gum if not present
 check_gum
 
@@ -436,6 +513,12 @@ case "$1" in
         ;;
     "restore-md")
         restore_md
+        ;;
+    "change-password")
+        change_password
+        ;;
+    "show-tables")
+        show_tables
         ;;
     "help")
         show_help

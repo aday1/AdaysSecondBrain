@@ -228,6 +228,12 @@ def home():
 def index():
     return redirect(url_for('login'))
 
+def get_db_connection():
+    db_path = os.path.join(os.path.dirname(__file__), '..', 'db', 'pkm.db')
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -239,12 +245,19 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         
-        if username == config['username'] and check_password_hash(config['password_hash'], password):
+        # Use credentials from config.json
+        config_username = config.get('username')
+        config_password_hash = config.get('password_hash')
+        
+        if username == config_username and check_password_hash(config_password_hash, password):
+            # Login successful
             user = User(username)
             login_user(user)
-            return redirect(url_for('dashboard'))  # Updated redirect to dashboard
+            flash('Login successful!', 'success')
+            return redirect(url_for('dashboard'))
         else:
-            flash('Invalid credentials')
+            # Login failed
+            flash('Invalid credentials', 'danger')
     return render_template('login.html')
 
 @app.route('/logout')

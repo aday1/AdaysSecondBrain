@@ -1,8 +1,8 @@
 {
     "web_enabled": true,
-    "username": "admin",
-    "password_hash": "scrypt:32768:8:1$lITaC9Mb4LYOdk6B$67702ee3dbb0931a64761a884379736ef27a34009749cd2e500ddde8931eef19510b5401f002da0bad8646091a5d9632b68a66f4113d745557ac44281af09b16",
-    "host": "0.0.0.0",
+    "username": "aday",
+    "password_hash": "scrypt:32768:8:1$wC8fNXrZo2VyEbK3$85af9edd96a5d83a4119baef957c24e8b69f0ae9764df9034bd4fb39a92cb6ccf554782227dd54855e53f41b53c03e8fb9ff2d29e77bea9a8c92c2133a4806e4",
+    "host": "10.13.37.8",
     "port": 5054,
     "title": "Adays Second Brain",
     "secret_key": "d8e8fca2dc0f896fd7cb4cb0031ba249",
