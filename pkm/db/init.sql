@@ -255,3 +255,13 @@ CREATE TABLE IF NOT EXISTS gratitude (
     date DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Goal progress history
+CREATE TABLE IF NOT EXISTS goal_progress_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    goal_id INTEGER NOT NULL,
+    completion INTEGER NOT NULL,
+    notes TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (goal_id) REFERENCES goals(id)
+);

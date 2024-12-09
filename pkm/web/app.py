@@ -39,9 +39,10 @@ werkzeug_logger.setLevel(logging.DEBUG)
 db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'db', 'pkm.db'))
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_POOL_SIZE'] = 5
-app.config['SQLALCHEMY_POOL_TIMEOUT'] = 30
+app.config['SQLALCHEMY_POOL_SIZE'] = 10  # Increase pool size
+app.config['SQLALCHEMY_POOL_TIMEOUT'] = 60  # Increase pool timeout
 app.config['SQLALCHEMY_POOL_RECYCLE'] = 1800
+app.config['SQLALCHEMY_MAX_OVERFLOW'] = 20  # Increase max overflow
 
 # Ensure the database directory exists
 os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -108,7 +109,7 @@ def init_db():
             existing_tables = {row[0] for row in cursor.fetchall()}
             
             # Only initialize if key tables are missing
-            required_tables = {'daily_metrics', 'work_logs', 'projects', 'habits'}
+            required_tables = {'daily_metrics', 'work_logs', 'projects', 'habits', 'goal_progress_history'}
             missing_tables = required_tables - existing_tables
             
             if missing_tables:
@@ -951,7 +952,6 @@ def add_habit():
         frequency = request.form.get('frequency')
         notes = request.form.get('notes')
 
-        # ...existing code...
         habit_name = new_habit_name if existing_habit == 'new' else existing_habit
         
         if not habit_name or not habit_name.strip():
@@ -962,13 +962,11 @@ def add_habit():
         cursor = conn.cursor()
 
         try:
-            # ...existing code...
             cursor.execute('SELECT name FROM habits WHERE name = ?', (habit_name,))
             if cursor.fetchone() and existing_habit == 'new':
                 flash('A habit with this name already exists')
                 return redirect(url_for('habits'))
 
-            # ...existing code...
             cursor.execute('''
                 INSERT OR IGNORE INTO habits (name, frequency, description)
                 VALUES (?, ?, ?)
@@ -1029,31 +1027,30 @@ def goals():
 def update_goal_completion(goal_name):
     data = request.get_json()
     completion = data.get('completion')
-    
+    notes = data.get('notes', '')
+
     conn = pkm.get_db_connection()
     cursor = conn.cursor()
     
     status = 'completed' if int(completion) >= 100 else 'active'
     completed_at = datetime.now() if status == 'completed' else None
     
-    # ...existing code...
     cursor.execute('SELECT id FROM goals WHERE title = ?', (goal_name,))
     goal_id = cursor.fetchone()[0]
     
-    # ...existing code...
     cursor.execute('''
         UPDATE goals 
         SET completion = ?,
             status = ?,
-            completed_at = ?
+            completed_at = ?,
+            notes = ?
         WHERE title = ?
-    ''', (completion, status, completed_at, goal_name))
+    ''', (completion, status, completed_at, notes, goal_name))
     
-    # ...existing code...
     cursor.execute('''
-        INSERT INTO goal_progress_history (goal_id, completion)
-        VALUES (?, ?)
-    ''', (goal_id, completion))
+        INSERT INTO goal_progress_history (goal_id, completion, notes)
+        VALUES (?, ?, ?)
+    ''', (goal_id, completion, notes))
     
     conn.commit()
     conn.close()
@@ -1067,7 +1064,7 @@ def get_goal_progress(goal_id):
     cursor = conn.cursor()
     
     cursor.execute('''
-        SELECT completion, timestamp 
+        SELECT completion, timestamp, notes 
         FROM goal_progress_history 
         WHERE goal_id = ? 
         ORDER BY timestamp ASC
@@ -1078,10 +1075,12 @@ def get_goal_progress(goal_id):
     
     dates = [h[1].split(' ')[0] for h in history]  # Get just the date part
     progress = [h[0] for h in history]
+    notes = [h[2] for h in history]
     
     return jsonify({
         'dates': dates,
-        'progress': progress
+        'progress': progress,
+        'notes': notes
     })
 
 @app.route('/update_goal_notes/<goal_name>', methods=['POST'])
@@ -1432,7 +1431,7 @@ def save_anxiety_data():
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data['date'],
-            data['timeStarted'],  # Ensure time_started column exists
+            data['timeStarted'],
             data['durationMinutes'],
             data['sudsScore'],
             data['socialIsolation'],
@@ -1452,6 +1451,7 @@ def save_anxiety_data():
         app.logger.error(f'Error saving anxiety data: {str(e)}')
         return jsonify({'error': str(e)}), 500
     finally:
+        cursor.close()
         conn.close()
 
 @app.route('/get_anxiety_data', methods=['GET'])
@@ -2033,7 +2033,6 @@ def log_sub_mood():
         conn = db.engine.raw_connection()
         cursor = conn.cursor()
         
-        # Updated query to match table schema
         cursor.execute('''
             INSERT INTO sub_mood_logs 
             (date, time, period, mood_level, energy_level, activity, notes)
