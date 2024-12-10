@@ -2521,6 +2521,59 @@ def update_subscription(subscription_id):
             cursor.close()
             conn.close()
 
+@app.route('/get_gratitude_stats')
+@login_required
+def get_gratitude_stats():
+    try:
+        # Get query parameters for date range
+        start_date = request.args.get('start_date', (datetime.now() - timedelta(weeks=8)).strftime('%Y-%m-%d'))
+        end_date = request.args.get('end_date', datetime.now().strftime('%Y-%m-%d'))
+
+        conn = pkm.get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            WITH RECURSIVE date_range AS (
+                SELECT date(?) as week_start
+                UNION ALL
+                SELECT date(week_start, '+7 days')
+                FROM date_range
+                WHERE week_start < date(?)
+            )
+            SELECT 
+                date_range.week_start,
+                COUNT(g.id) as count
+            FROM date_range
+            LEFT JOIN gratitude g ON g.date >= date_range.week_start 
+                AND g.date < date(date_range.week_start, '+7 days')
+            GROUP BY date_range.week_start
+            ORDER BY date_range.week_start ASC
+        ''', (start_date, end_date))
+        
+        results = cursor.fetchall()
+        
+        weeks = []
+        counts = []
+        
+        for row in results:
+            week_start = datetime.strptime(row[0], '%Y-%m-%d')
+            week_end = week_start + timedelta(days=6)
+            weeks.append(f"{week_start.strftime('%b %d')} - {week_end.strftime('%b %d')}")
+            counts.append(row[1])
+        
+        return jsonify({
+            'weeks': weeks,
+            'counts': counts,
+            'start_date': start_date,
+            'end_date': end_date
+        })
+        
+    except Exception as e:
+        app.logger.error(f'Error getting gratitude stats: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PKM Web Interface')
     parser.add_argument('--host', default='0.0.0.0', help='Host to bind to')

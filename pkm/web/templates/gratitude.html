@@ -4,6 +4,16 @@
 <div class="container-fluid">
     <h1 class="mb-4">Gratitude Journal</h1>
 
+    <!-- Add Chart Section -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Weekly Gratitude Trend</h5>
+        </div>
+        <div class="card-body">
+            <div id="gratitudeChart" style="height: 300px;"></div>
+        </div>
+    </div>
+
     <form action="{{ url_for('save_gratitude') }}" method="POST">
         <div class="mb-3">
             <label for="gratitude_content" class="form-label">What are you grateful for?</label>
@@ -31,4 +41,70 @@
         <p>No gratitude entries found.</p>
     {% endif %}
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize gratitude chart
+    function initGratitudeChart() {
+        fetch('/get_gratitude_stats')
+            .then(response => response.json())
+            .then(data => {
+                const chart = new ApexCharts(document.querySelector("#gratitudeChart"), {
+                    chart: {
+                        type: 'bar',
+                        height: 300
+                    },
+                    series: [{
+                        name: 'Gratitudes',
+                        data: data.counts
+                    }],
+                    xaxis: {
+                        categories: data.weeks,
+                        title: {
+                            text: 'Week'
+                        }
+                    },
+                    yaxis: {
+                        title: {
+                            text: 'Number of Gratitudes'
+                        }
+                    },
+                    colors: ['#28a745'],
+                    plotOptions: {
+                        bar: {
+                            borderRadius: 4,
+                            dataLabels: {
+                                position: 'top'
+                            }
+                        }
+                    },
+                    dataLabels: {
+                        enabled: true,
+                        formatter: function(val) {
+                            return val;
+                        },
+                        offsetY: -20,
+                        style: {
+                            fontSize: '12px',
+                            colors: ["#304758"]
+                        }
+                    },
+                    tooltip: {
+                        y: {
+                            formatter: function(val) {
+                                return val + " gratitudes";
+                            }
+                        }
+                    }
+                });
+
+                chart.render();
+            })
+            .catch(error => console.error('Error loading gratitude stats:', error));
+    }
+
+    // Initialize chart
+    initGratitudeChart();
+});
+</script>
 {% endblock %}
