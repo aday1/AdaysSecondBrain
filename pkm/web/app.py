@@ -1476,6 +1476,7 @@ def get_anxiety_data():
         
         cursor.execute('''
             SELECT 
+                a.id,
                 a.date, 
                 a.time_started, 
                 a.suds_score, 
@@ -1492,7 +1493,7 @@ def get_anxiety_data():
             FROM anxiety_logs a
             LEFT JOIN anxiety_triggers t ON a.trigger_id = t.id
             LEFT JOIN coping_strategies cs ON a.coping_strategy_id = cs.id
-            ORDER BY a.date ASC, a.time_started ASC
+            ORDER BY a.date DESC, a.time_started DESC
         ''')
         
         logs = cursor.fetchall()
@@ -1508,27 +1509,28 @@ def get_anxiety_data():
         }
         
         for log in logs:
-            timestamp = f"{log[0]}T{log[1]}"
+            timestamp = f"{log[1]}T{log[2]}"
             data['timestamps'].append(timestamp)
-            data['suds'].append(log[2])
-            data['social'].append(log[3])
-            data['control'].append(log[4])
-            data['subjugation'].append(log[5])
-            data['negativity'].append(log[6])
-            data['standards'].append(log[7])
+            data['suds'].append(log[3])
+            data['social'].append(log[4])
+            data['control'].append(log[5])
+            data['subjugation'].append(log[6])
+            data['negativity'].append(log[7])
+            data['standards'].append(log[8])
             data['logs'].append({
+                'id': log[0],  # Include the actual database ID
                 'timestamp': timestamp,
-                'suds': log[2],
-                'social': log[3],
-                'control': log[4],
-                'subjugation': log[5],
-                'negativity': log[6],
-                'standards': log[7],
-                'effectiveness': log[8],
-                'trigger': log[9],
-                'strategy': log[10],
-                'duration': log[11],
-                'notes': log[12]
+                'suds': log[3],
+                'social': log[4],
+                'control': log[5],
+                'subjugation': log[6],
+                'negativity': log[7],
+                'standards': log[8],
+                'effectiveness': log[9],
+                'trigger': log[10],
+                'strategy': log[11],
+                'duration': log[12],
+                'notes': log[13]
             })
         
         conn.close()
@@ -1538,6 +1540,68 @@ def get_anxiety_data():
         return jsonify({'error': str(e)}), 500
 
 # ...existing code...
+@app.route('/get_anxiety_log/<int:log_id>', methods=['GET'])
+@login_required
+def get_anxiety_log(log_id):
+    try:
+        conn = pkm.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                date, time_started, duration_minutes, suds_score,
+                social_isolation, insufficient_self_control,
+                subjugation, negativity, unrelenting_standards,
+                trigger_id, coping_strategy_id, effectiveness, notes
+            FROM anxiety_logs
+            WHERE id = ?
+        ''', (log_id,))
+        log = cursor.fetchone()
+        if log:
+            return jsonify({
+                'success': True,
+                'log': {
+                    'date': log[0],
+                    'timeStarted': log[1],
+                    'durationMinutes': log[2],
+                    'sudsScore': log[3],
+                    'socialIsolation': log[4],
+                    'insufficientSelfControl': log[5],
+                    'subjugation': log[6],
+                    'negativity': log[7],
+                    'unrelentingStandards': log[8],
+                    'trigger': log[9],
+                    'copingStrategy': log[10],
+                    'effectiveness': log[11],
+                    'notes': log[12]
+                }
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Log not found'}), 404
+    except Exception as e:
+        app.logger.error(f'Error fetching anxiety log: {str(e)}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.route('/delete_anxiety_log/<int:log_id>', methods=['DELETE'])
+@login_required
+def delete_anxiety_log(log_id):
+    try:
+        conn = pkm.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM anxiety_logs WHERE id = ?', (log_id,))
+        if cursor.rowcount == 0:
+            return jsonify({'success': False, 'error': 'Log not found'}), 404
+        conn.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        app.logger.error(f'Error deleting anxiety log: {str(e)}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 @app.errorhandler(404)
 def not_found_error(error):
     return render_template('404.html'), 404

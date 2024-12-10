@@ -67,6 +67,28 @@
         [data-bs-theme="dark"] .chart-container {
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
+        .notes-column {
+            width: 30%; /* Adjust width as needed */
+        }
+        .actions-column {
+            width: 10%; /* Adjust width as needed */
+        }
+        .table-responsive {
+            overflow-x: auto; /* Ensure table is scrollable horizontally */
+        }
+        .table {
+            table-layout: fixed; /* Ensure table layout is fixed */
+            width: 100%; /* Ensure table takes full width */
+        }
+        .table th, .table td {
+            white-space: normal; /* Allow text to wrap */
+            word-wrap: break-word; /* Break long words */
+        }
+        .resizable {
+            resize: both;
+            overflow: auto;
+            min-height: 400px;
+        }
     </style>
 </head>
 <body>
@@ -228,7 +250,7 @@
                     <div class="card-header">
                         <h5 class="card-title mb-0">SUDS Over Time</h5>
                     </div>
-                    <div class="card-body chart-container">
+                    <div class="card-body chart-container resizable">
                         <div id="sudsChart"></div>
                     </div>
                 </div>
@@ -238,7 +260,7 @@
                     <div class="card-header">
                         <h5 class="card-title mb-0">Anxiety Factors & Coping Scores Over Time</h5>
                     </div>
-                    <div class="card-body chart-container">
+                    <div class="card-body chart-container resizable">
                         <div id="anxietyFactorsChart"></div>
                     </div>
                 </div>
@@ -263,6 +285,7 @@
                                 <th>Strategy</th>
                                 <th>Effectiveness</th>
                                 <th>Notes</th>
+                                <th>Actions</th> <!-- Add Actions column header -->
                             </tr>
                         </thead>
                         <tbody>
@@ -549,11 +572,18 @@ document.addEventListener('DOMContentLoaded', function() {
     syncDateTime(); // Set current date/time on load
     loadTriggersAndStrategies(); // Load dropdown options
     
-    // Initialize DataTables
-    $('#anxietyLogsTable').DataTable({
+    // Initialize DataTables with proper ID handling
+    const table = $('#anxietyLogsTable').DataTable({
         ajax: {
             url: '/get_anxiety_data',
-            dataSrc: 'logs'
+            dataSrc: function(json) {
+                // Map the data to include id field
+                return json.logs.map(log => ({
+                    ...log,
+                    id: log.id || Date.parse(log.timestamp), // Fallback ID if none exists
+                    DT_RowId: `log-${log.id || Date.parse(log.timestamp)}` // Add row ID
+                }));
+            }
         },
         columns: [
             { data: 'timestamp' },
@@ -567,13 +597,117 @@ document.addEventListener('DOMContentLoaded', function() {
             { data: 'trigger' },
             { data: 'strategy' },
             { data: 'effectiveness' },
-            { data: 'notes' }
-        ]
+            { data: 'notes', className: 'notes-column' },
+            {
+                data: 'id',
+                className: 'actions-column',
+                render: function(data, type, row) {
+                    return `
+                        <button class="btn btn-sm btn-primary edit-btn" data-id="${data}">Edit</button>
+                        <button class="btn btn-sm btn-danger delete-btn" data-id="${data}">Delete</button>
+                    `;
+                }
+            }
+        ],
+        scrollX: true,
+        order: [[0, 'desc']], // Sort by timestamp descending
+        rowId: 'DT_RowId' // Set row ID for easier reference
     });
 
+    // Add error handling for element references
+    $('#anxietyLogsTable').on('click', '.edit-btn, .delete-btn', function(e) {
+        e.preventDefault();
+        const logId = $(this).data('id');
+        
+        if (!logId) {
+            console.error('No log ID found');
+            alert('Error: Could not find log ID');
+            return;
+        }
+
+        if ($(this).hasClass('edit-btn')) {
+            handleEdit(logId);
+        } else if ($(this).hasClass('delete-btn')) {
+            handleDelete(logId);
+        }
+    });
+
+    // Separate handler functions
+    function handleEdit(logId) {
+        fetch(`/get_anxiety_log/${logId}`)
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                return response.json();
+            })
+            .then(data => {
+                if (!data.success) throw new Error(data.error || 'Failed to fetch log data');
+                populateForm(data.log);
+            })
+            .catch(error => {
+                console.error('Error fetching log:', error);
+                alert(`Error fetching log: ${error.message}`);
+            });
+    }
+
+    function handleDelete(logId) {
+        if (confirm('Are you sure you want to delete this log?')) {
+            fetch(`/delete_anxiety_log/${logId}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                return response.json();
+            })
+            .then(data => {
+                if (!data.success) throw new Error(data.error || 'Failed to delete log');
+                table.ajax.reload();
+                alert('Log deleted successfully');
+            })
+            .catch(error => {
+                console.error('Error deleting log:', error);
+                alert(`Error deleting log: ${error.message}`);
+            });
+        }
+    }
+
+    function populateForm(log) {
+        if (!log) return;
+        
+        // Safely set form values
+        const setValueSafely = (id, value) => {
+            const element = document.getElementById(id);
+            if (element) element.value = value;
+        };
+
+        setValueSafely('date', log.date);
+        setValueSafely('timeStarted', log.timeStarted);
+        setValueSafely('durationMinutes', log.durationMinutes);
+        setValueSafely('sudsScore', log.sudsScore);
+        setValueSafely('socialIsolation', log.socialIsolation);
+        setValueSafely('insufficientSelfControl', log.insufficientSelfControl);
+        setValueSafely('subjugation', log.subjugation);
+        setValueSafely('negativity', log.negativity);
+        setValueSafely('unrelentingStandards', log.unrelentingStandards);
+        setValueSafely('trigger', log.trigger);
+        setValueSafely('copingStrategy', log.copingStrategy);
+        setValueSafely('effectiveness', log.effectiveness);
+        setValueSafely('notes', log.notes);
+
+        // Scroll to form
+        const form = document.getElementById('anxietyForm');
+        if (form) form.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // ...existing code...
     function updateCharts() {
         fetch('/get_anxiety_data')
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
             .then(data => {
                 console.log('Fetched chart data:', data); // Debugging statement
 
