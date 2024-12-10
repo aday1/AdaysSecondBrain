@@ -34,7 +34,7 @@
             <h5 class="card-title mb-0">Your Goals</h5>
         </div>
         <div class="card-body">
-            {% if goals %}
+            {% if active_goals %}
             <div class="table-responsive">
                 <table class="table">
                     <thead>
@@ -46,7 +46,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for goal in goals %}
+                        {% for goal in active_goals %}
                         <tr data-goal-id="{{ goal.id }}">
                             <td>{{ goal.title }}</td>
                             <td style="width: 250px;">
@@ -71,8 +71,52 @@
             </div>
             {% else %}
             <div class="alert alert-info mb-0">
-                No goals found. Add your first goal using the form above.
+                No active goals found. Add your first goal using the form above.
             </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="container mt-4">
+    <h1>Goals Tracking</h1>
+    
+    <!-- Goals completion chart -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Goals Progress Over Time</h5>
+            <canvas id="goalsCompletionChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Historical Goals Section -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Historical Goals</h3>
+        </div>
+        <div class="card-body">
+            {% if historical_goals %}
+                <div class="goals-list">
+                    {% for goal in historical_goals %}
+                        <div class="goal-item mb-3">
+                            <h4>{{ goal.title }}</h4>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-success" role="progressbar" 
+                                     style="width: 100%">
+                                    Completed
+                                </div>
+                            </div>
+                            {% if goal.notes %}
+                                <p class="text-muted">{{ goal.notes }}</p>
+                            {% endif %}
+                            <small class="text-muted">
+                                Completed on: {{ goal.completed_at|format_date }}
+                            </small>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p>No completed goals.</p>
             {% endif %}
         </div>
     </div>
@@ -190,6 +234,53 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    // Fetch and render goals completion chart
+    fetch('/get_goals_completion_data')
+        .then(response => response.json())
+        .then(data => {
+            const ctx = document.getElementById('goalsCompletionChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        {
+                            label: 'Completed Goals',
+                            data: data.completed,
+                            backgroundColor: 'rgba(40, 167, 69, 0.5)',
+                            borderColor: 'rgba(40, 167, 69, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Active Goals',
+                            data: data.active,
+                            backgroundColor: 'rgba(0, 123, 255, 0.5)',
+                            borderColor: 'rgba(0, 123, 255, 1)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Goals Progress Over Time'
+                        }
+                    }
+                }
+            });
+        })
+        .catch(error => console.error('Error loading goals data:', error));
 });
 </script>
 {% endblock %}

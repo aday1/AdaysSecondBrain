@@ -183,7 +183,16 @@ def load_user(user_id):
 def format_date_filter(date):
     """Convert date to format with month name"""
     if isinstance(date, str):
-        date = datetime.strptime(date, '%Y-%m-%d')
+        try:
+            # Try parsing as date only
+            date = datetime.strptime(date, '%Y-%m-%d')
+        except ValueError:
+            try:
+                # Try parsing as datetime
+                date = datetime.strptime(date, '%Y-%m-%d %H:%M:%S.%f')
+            except ValueError:
+                # Try parsing without microseconds
+                date = datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
     return date.strftime('%B %d, %Y')  # e.g., "January 01, 2024"
 
 def get_mood_emoji(value):
@@ -1023,17 +1032,78 @@ def goals():
         except Exception as e:
             flash(f'Error adding goal: {str(e)}')
     
-    # ...existing code...
+    # Get active goals
     cursor.execute('''
-        SELECT id, title, notes, completion, status 
+        SELECT id, title, notes, completion, status, created_at 
         FROM goals 
-        WHERE status = 'active' 
+        WHERE status = 'active' OR status IS NULL
         ORDER BY created_at DESC
     ''')
-    goals = [dict(zip(['id', 'title', 'notes', 'completion', 'status'], row)) for row in cursor.fetchall()]
+    active_goals = [dict(zip(['id', 'title', 'notes', 'completion', 'status', 'created_at'], row)) 
+                   for row in cursor.fetchall()]
+
+    # Get completed (historical) goals 
+    cursor.execute('''
+        SELECT id, title, notes, completion, status, created_at, completed_at 
+        FROM goals 
+        WHERE status = 'completed' 
+        ORDER BY completed_at DESC
+    ''')
+    historical_goals = [dict(zip(['id', 'title', 'notes', 'completion', 'status', 'created_at', 'completed_at'], row)) 
+                       for row in cursor.fetchall()]
     
     conn.close()
-    return render_template('goals.html', goals=goals)
+    return render_template('goals.html', 
+                         active_goals=active_goals, 
+                         historical_goals=historical_goals)
+
+@app.route('/get_goals_completion_data')
+@login_required
+def get_goals_completion_data():
+    try:
+        conn = pkm.get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get completion data by month
+        cursor.execute('''
+            WITH RECURSIVE months AS (
+                SELECT date('now', 'start of month', '-11 months') as month
+                UNION ALL
+                SELECT date(month, '+1 month')
+                FROM months
+                WHERE month < date('now', 'start of month')
+            )
+            SELECT 
+                strftime('%Y-%m', months.month) as month,
+                COUNT(CASE WHEN g.status = 'completed' THEN 1 END) as completed_goals,
+                COUNT(CASE WHEN g.status = 'active' THEN 1 END) as active_goals
+            FROM months
+            LEFT JOIN goals g ON strftime('%Y-%m', COALESCE(g.completed_at, g.created_at)) = strftime('%Y-%m', months.month)
+            GROUP BY strftime('%Y-%m', months.month)
+            ORDER BY month ASC
+        ''')
+        
+        results = cursor.fetchall()
+        
+        data = {
+            'labels': [],
+            'completed': [],
+            'active': []
+        }
+        
+        for row in results:
+            month = datetime.strptime(row[0], '%Y-%m').strftime('%b %Y')
+            data['labels'].append(month)
+            data['completed'].append(row[1])
+            data['active'].append(row[2])
+        
+        return jsonify(data)
+        
+    except Exception as e:
+        app.logger.error(f'Error getting goals completion data: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
 
 @app.route('/update_goal_completion/<goal_name>', methods=['POST'])
 @login_required
