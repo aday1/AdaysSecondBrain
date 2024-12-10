@@ -275,60 +275,117 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+def get_db_size():
+    """Get the current size of the database file"""
+    try:
+        size_bytes = os.path.getsize(db_path)
+        if size_bytes < 1024:
+            return f"{size_bytes} bytes"
+        elif size_bytes < 1024 * 1024:
+            return f"{size_bytes/1024:.1f} KB"
+        else:
+            return f"{size_bytes/(1024*1024):.1f} MB"
+    except OSError:
+        return "Unknown"
+
+def get_last_backup_time():
+    """Get the timestamp of the last backup"""
+    backup_dir = os.path.join(os.path.dirname(db_path), 'backups')
+    try:
+        backups = [f for f in os.listdir(backup_dir) if f.endswith('.db')]
+        if not backups:
+            return None
+        latest = max(backups, key=lambda f: os.path.getmtime(os.path.join(backup_dir, f)))
+        timestamp = os.path.getmtime(os.path.join(backup_dir, latest))
+        return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+    except OSError:
+        return None
+
+@app.route('/get_system_info')
+@login_required
+def get_system_info():
+    return jsonify({
+        'db_size': get_db_size(),
+        'last_backup': get_last_backup_time(),
+        'db_path': db_path
+    })
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    """Main dashboard view showing overview of various metrics"""
     selected_date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
     date_range = request.args.get('range', 'day')
     
-    conn = db.engine.raw_connection()
-    cursor = conn.cursor()
-    
     try:
-        stats = {
-            'mood': 0,
-            'energy': 0,
-            'sleep_hours': 0,
-            'work_hours': 0,
-            'habits_completed': 0,
-            'total_habits': 0
-        }
+        # Get daily log content
+        daily_log_path = os.path.join(pkm.daily_dir, f'{selected_date}.md')
+        app.logger.debug(f"Looking for daily log at: {daily_log_path}")
+        daily_log = None
 
-        # Adjust query based on date range
-        date_filters = {
-            'day': "date = ?",
-            'week': "date >= date(?, '-6 days') AND date <= ?",
-            'month': "date >= date(?, 'start of month') AND date <= date(?, 'end of month')",
-            'year': "date >= date(?, 'start of year') AND date <= date(?, 'end of year')"
+        if os.path.exists(daily_log_path):
+            try:
+                with open(daily_log_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    daily_log = markdown.markdown(content, extensions=['fenced_code', 'tables'])
+                    app.logger.debug("Successfully loaded and converted daily log")
+            except Exception as e:
+                app.logger.error(f"Error reading daily log: {str(e)}")
+                daily_log = f"<p class='text-danger'>Error reading log: {str(e)}</p>"
+        else:
+            app.logger.debug(f"No daily log found at {daily_log_path}")
+
+        system_info = {
+            'db_size': get_db_size(),
+            'last_backup': get_last_backup_time(),
+            'db_path': db_path
         }
-        
-        date_filter = date_filters.get(date_range, date_filters['day'])
-        
-        # Update queries to use date range
-        cursor.execute(f'''
-            SELECT AVG(mood_level), AVG(energy_level)
-            FROM sub_mood_logs  
-            WHERE {date_filter}
-        ''', (selected_date, selected_date) if date_range != 'day' else (selected_date,))
-        
-        # ...rest of existing queries with similar date range handling...
         
         return render_template('dashboard.html', 
-                             stats=stats, 
                              selected_date=selected_date,
-                             date_range=date_range)
+                             date_range=date_range,
+                             system_info=system_info,
+                             daily_log=daily_log)
         
     except Exception as e:
         app.logger.error(f'Error loading dashboard: {str(e)}')
         flash('Error loading dashboard data')
         return render_template('dashboard.html', 
-                             stats=stats, 
                              selected_date=selected_date,
-                             date_range=date_range)
+                             date_range=date_range,
+                             system_info={},
+                             daily_log=None)
+
+@app.route('/execute_sql', methods=['POST'])
+@login_required
+def execute_sql():
+    try:
+        query = request.json.get('query', '').strip()
+        if not query:
+            return jsonify({'error': 'Query is required'}), 400
+
+        if not query.lower().startswith('select'):
+            return jsonify({'error': 'Only SELECT queries are allowed'}), 400
+
+        conn = db.engine.raw_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute(query)
+        columns = [description[0] for description in cursor.description]
+        rows = cursor.fetchall()
+        
+        return jsonify({
+            'columns': columns,
+            'rows': rows
+        })
+
+    except Exception as e:
+        app.logger.error(f'Error executing SQL: {str(e)}')
+        return jsonify({'error': str(e)}), 500
     finally:
-        cursor.close()
-        conn.close()
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
 
 # ...existing code...
 

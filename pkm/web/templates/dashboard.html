@@ -21,149 +21,109 @@
         </div>
     </div>
 
-    <h1 class="mb-4">Dashboard</h1>
-    
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card">
+    <div class="row">
+        <!-- System Status Card -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">System Status</h5>
+                </div>
                 <div class="card-body">
-                    <div id="overviewChart" style="width: 100%; height: 350px;"></div>
+                    <div class="mb-3">
+                        <h6>Database Size</h6>
+                        <p class="mb-0">{{ system_info.db_size }}</p>
+                    </div>
+                    <div class="mb-3">
+                        <h6>Last Backup</h6>
+                        <p class="mb-0">{{ system_info.last_backup or 'No backup recorded' }}</p>
+                    </div>
+                    <div class="mb-3">
+                        <h6>Database Location</h6>
+                        <p class="mb-0">{{ system_info.db_path }}</p>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-6">
-            <div class="card">
+        <!-- SQL Terminal Card -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">SQL Terminal</h5>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary me-2" onclick="showExamples()">Show Examples</button>
+                        <button class="btn btn-sm btn-primary" onclick="executeQuery()">Run Query</button>
+                    </div>
+                </div>
                 <div class="card-body">
-                    <div id="eGraph" style="width: 100%; height: 350px;"></div>
+                    <div class="mb-3">
+                        <textarea id="sqlQuery" class="form-control font-monospace" rows="4" 
+                                placeholder="Enter SELECT query..."></textarea>
+                        <div id="exampleQueries" class="mt-2 d-none">
+                            <small class="text-muted">Example queries:</small>
+                            <pre class="bg-light p-2 mt-1 rounded cursor-pointer" onclick="setQuery(this)">-- Show all tables in the database
+SELECT name FROM sqlite_master 
+WHERE type='table' 
+ORDER BY name;</pre>
+                            <pre class="bg-light p-2 mt-1 rounded cursor-pointer" onclick="setQuery(this)">-- Show structure of a specific table
+SELECT sql FROM sqlite_master 
+WHERE type='table' AND name='daily_metrics';</pre>
+                            <pre class="bg-light p-2 mt-1 rounded cursor-pointer" onclick="setQuery(this)">SELECT * FROM sub_mood_logs ORDER BY date DESC LIMIT 5;</pre>
+                            <pre class="bg-light p-2 mt-1 rounded cursor-pointer" onclick="setQuery(this)">SELECT date, sleep_hours, sleep_quality FROM daily_metrics WHERE date >= date('now', '-7 days');</pre>
+                            <pre class="bg-light p-2 mt-1 rounded cursor-pointer" onclick="setQuery(this)">SELECT h.name, COUNT(*) as completions 
+FROM habits h 
+JOIN habit_logs hl ON h.name = hl.habit_id 
+GROUP BY h.name;</pre>
+                            <pre class="bg-light p-2 mt-1 rounded cursor-pointer" onclick="setQuery(this)">SELECT p.name, SUM(w.total_hours) as total_hours 
+FROM work_logs w 
+JOIN projects p ON w.project_id = p.id 
+GROUP BY p.name;</pre>
+                            <pre class="bg-light p-2 mt-1 rounded cursor-pointer" onclick="setQuery(this)">-- Example of building a complex query
+WITH daily_stats AS (
+    SELECT 
+        date,
+        AVG(mood_level) as avg_mood,
+        AVG(energy_level) as avg_energy,
+        COUNT(*) as num_entries
+    FROM sub_mood_logs
+    WHERE date >= date('now', '-7 days')
+    GROUP BY date
+)
+SELECT 
+    ds.date,
+    ds.avg_mood,
+    ds.avg_energy,
+    dm.sleep_hours,
+    COUNT(hl.completed_at) as habits_completed
+FROM daily_stats ds
+LEFT JOIN daily_metrics dm ON ds.date = dm.date
+LEFT JOIN habit_logs hl ON date(hl.completed_at) = ds.date
+GROUP BY ds.date
+ORDER BY ds.date DESC;</pre>
+                        </div>
+                    </div>
+                    <div id="queryResults" class="table-responsive">
+                        <p class="text-muted">Results will appear here...</p>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Dashboard Metrics -->
-    <div class="row">
-        <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Sleep Data</h5>
-                </div>
-                <div class="card-body">
-                    <p><strong>Sleep Hours:</strong> {{ sleep_hours }}</p>
-                    <p><strong>Sleep Quality:</strong> {{ sleep_quality }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Mood and Energy</h5>
-                </div>
-                <div class="card-body">
-                    <p><strong>Average Mood:</strong> {{ avg_mood }}</p>
-                    <p><strong>Average Energy:</strong> {{ avg_energy }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Work Hours</h5>
-                </div>
-                <div class="card-body">
-                    <p><strong>Work Hours:</strong> {{ work_hours }}</p>
-                </div>
-            </div>
-        </div>
+    <!-- Daily Log Section -->
+    <div class="row mt-4">
         <div class="col-12">
-            <h2>Daily Logs</h2>
             <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Daily Log</h5>
+                    <a href="{{ url_for('daily_logs', date=selected_date) }}" class="btn btn-sm btn-primary">View Full Log</a>
+                </div>
                 <div class="card-body">
-                    {% for log in logs %}
-                    <div class="log-entry mb-3">
-                        <h5 class="mb-1">{{ log.date }}</h5>
-                        <div class="log-content">{{ log.content|safe }}</div>
-                    </div>
+                    {% if daily_log %}
+                        {{ daily_log|safe }}
                     {% else %}
-                    <p>No daily logs available.</p>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="container-fluid">
-    <h1 class="mb-4">Dashboard</h1>
-    <div class="row">
-        <!-- Mood & Energy Card -->
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Today's Mood & Energy</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-6 text-center">
-                            <h3>Mood</h3>
-                            <div class="display-4">{{ stats.mood }}/10</div>
-                        </div>
-                        <div class="col-6 text-center">
-                            <h3>Energy</h3>
-                            <div class="display-4">{{ stats.energy }}/10</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Sleep Card -->
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Sleep</h5>
-                </div>
-                <div class="card-body text-center">
-                    <h3>Hours Slept</h3>
-                    <div class="display-4">{{ stats.sleep_hours }}</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Work Hours Card -->
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Work</h5>
-                </div>
-                <div class="card-body text-center">
-                    <h3>Hours Worked</h3>
-                    <div class="display-4">{{ stats.work_hours }}</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Habits Card -->
-        <div class="col-md-6 mb-4">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Habits Progress</h5>
-                </div>
-                <div class="card-body">
-                    <h3 class="text-center mb-3">{{ stats.habits_completed }}/{{ stats.total_habits }} Completed</h3>
-                    <div class="progress" style="height: 25px;">
-                        <div class="progress-bar" role="progressbar" 
-                             style="width: {{ (stats.habits_completed / stats.total_habits * 100) if stats.total_habits > 0 else 0 }}%;"
-                             aria-valuenow="{{ stats.habits_completed }}"
-                             aria-valuemin="0"
-                             aria-valuemax="{{ stats.total_habits }}">
-                            {% if stats.total_habits > 0 %}
-                                {{ (stats.habits_completed / stats.total_habits * 100) | round }}%
-                            {% else %}
-                                No habits
-                            {% endif %}
-                        </div>
-                    </div>
+                        <p class="text-muted">No log entry for this date</p>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -267,6 +227,83 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+function updateSystemInfo() {
+    fetch('/get_system_info')
+        .then(response => response.json())
+        .then(data => {
+            // Update system info elements
+            document.querySelector('.card-body p:first-child').textContent = data.db_size;
+            // Update other elements as needed
+        })
+        .catch(error => console.error('Error updating system info:', error));
+}
+
+// Update system info every 30 seconds
+setInterval(updateSystemInfo, 30000);
+
+function executeQuery() {
+    const query = document.getElementById('sqlQuery').value;
+    const resultsDiv = document.getElementById('queryResults');
+    
+    fetch('/execute_sql', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: query })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            resultsDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+            return;
+        }
+        
+        const table = document.createElement('table');
+        table.className = 'table table-sm table-striped';
+        
+        // Add headers
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        data.columns.forEach(column => {
+            const th = document.createElement('th');
+            th.textContent = column;
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+        
+        // Add data rows
+        const tbody = document.createElement('tbody');
+        data.rows.forEach(row => {
+            const tr = document.createElement('tr');
+            row.forEach(cell => {
+                const td = document.createElement('td');
+                td.textContent = cell;
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        
+        resultsDiv.innerHTML = '';
+        resultsDiv.appendChild(table);
+    })
+    .catch(error => {
+        resultsDiv.innerHTML = `<div class="alert alert-danger">Error executing query: ${error}</div>`;
+    });
+}
+
+function showExamples() {
+    const examples = document.getElementById('exampleQueries');
+    examples.classList.toggle('d-none');
+}
+
+function setQuery(element) {
+    const queryArea = document.getElementById('sqlQuery');
+    queryArea.value = element.textContent;
+}
 </script>
 {% endblock %}
 {% endblock %}
