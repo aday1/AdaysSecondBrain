@@ -2480,6 +2480,47 @@ def delete_sleep(date):
             cursor.close()
             conn.close()
 
+@app.route('/update_subscription/<int:subscription_id>', methods=['POST'])
+@login_required
+def update_subscription(subscription_id):
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        service_name = data.get('service_name')
+        renewal_date = data.get('renewal_date')
+        monthly_cost = float(data.get('monthly_cost', 0))
+        category = data.get('category')
+        yearly_total = monthly_cost * 12
+
+        conn = pkm.get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            UPDATE finance_forecast 
+            SET service_name = ?,
+                renewal_date = ?,
+                monthly_cost = ?,
+                yearly_total = ?,
+                category = ?
+            WHERE id = ?
+        ''', (service_name, renewal_date, monthly_cost, yearly_total, category, subscription_id))
+
+        if cursor.rowcount == 0:
+            return jsonify({'error': 'Subscription not found'}), 404
+
+        conn.commit()
+        return jsonify({'success': True})
+
+    except Exception as e:
+        app.logger.error(f'Error updating subscription: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if 'conn' in locals():
+            cursor.close()
+            conn.close()
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PKM Web Interface')
     parser.add_argument('--host', default='0.0.0.0', help='Host to bind to')

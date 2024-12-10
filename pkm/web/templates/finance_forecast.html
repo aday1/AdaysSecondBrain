@@ -224,6 +224,60 @@
     
     <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // Initialize table with edit functionality
+        const table = document.querySelector('.table');
+        if (!table) return; // Guard clause if table doesn't exist
+
+        // Handle subscription edits
+        table.addEventListener('click', async function(e) {
+            const target = e.target;
+            if (!target.classList.contains('edit-btn')) return;
+
+            const row = target.closest('tr');
+            if (!row) return;
+
+            const subscriptionId = row.dataset.subscriptionId;
+            if (!subscriptionId) {
+                console.error('No subscription ID found');
+                return;
+            }
+
+            try {
+                const data = {
+                    service_name: row.querySelector('.service-name').value,
+                    renewal_date: row.querySelector('.renewal-date').value,
+                    monthly_cost: parseFloat(row.querySelector('.monthly-cost').value),
+                    category: row.querySelector('.category').value
+                };
+
+                const response = await fetch(`/update_subscription/${subscriptionId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) throw new Error('Failed to update subscription');
+                
+                const result = await response.json();
+                if (result.success) {
+                    window.location.reload(); // Refresh to show updated data
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error updating subscription: ' + error.message);
+            }
+        });
+
+        // Initialize charts if container exists
+        const trendsChart = document.getElementById('subscriptionTrendsChart');
+        if (trendsChart) {
+            updateTrendsChart();
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
         // Chart container references
         const chartContainers = {
             pie: document.getElementById('categoryPieChart'),
