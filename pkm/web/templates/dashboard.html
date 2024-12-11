@@ -2,25 +2,8 @@
 
 {% block content %}
 <div class="container-fluid">
-    <!-- Add date navigation controls -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Dashboard</h1>
-        <div class="d-flex gap-2">
-            <button class="btn btn-outline-secondary" onclick="navigateDate('prev')">&lt;</button>
-            <div class="d-flex gap-2 align-items-center">
-                <select id="dateRange" class="form-select" onchange="updateDateRange()">
-                    <option value="day">Day</option>
-                    <option value="week">Week</option>
-                    <option value="month">Month</option>
-                    <option value="year">Year</option>
-                </select>
-                <input type="date" id="selectedDate" class="form-control" value="{{ selected_date }}" onchange="updateDashboard()">
-                <button class="btn btn-primary" onclick="syncToNow()">Now</button>
-            </div>
-            <button class="btn btn-outline-secondary" onclick="navigateDate('next')">&gt;</button>
-        </div>
-    </div>
-
+    <h1>Dashboard</h1>
+    
     <div class="row">
         <!-- System Status Card -->
         <div class="col-md-6 mb-4">
@@ -29,17 +12,54 @@
                     <h5 class="card-title mb-0">System Status</h5>
                 </div>
                 <div class="card-body">
-                    <div class="mb-3">
-                        <h6>Database Size</h6>
-                        <p class="mb-0">{{ system_info.db_size }}</p>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Current DB Size:</strong> <span id="dbSize">Loading...</span></p>
+                            
+                            <p><strong>Memory Usage:</strong> <span id="memoryUsage">Loading...</span></p>
+                            <div class="progress mb-2">
+                                <div class="progress-bar" role="progressbar" id="memoryBar" style="width: 0%">
+                                    <span class="progress-text"></span>
+                                </div>
+                            </div>
+                            
+                            <p><strong>CPU Usage:</strong> <span id="cpuUsage">Loading...</span></p>
+                            <div class="progress mb-2">
+                                <div class="progress-bar" role="progressbar" id="cpuBar" style="width: 0%">
+                                    <span class="progress-text"></span>
+                                </div>
+                            </div>
+                            
+                            <p><strong>Disk Usage:</strong> <span id="diskUsage">Loading...</span></p>
+                            <div class="progress mb-2">
+                                <div class="progress-bar" role="progressbar" id="diskBar" style="width: 0%">
+                                    <span class="progress-text"></span>
+                                </div>
+                            </div>
+                            
+                            <p><strong>Uptime:</strong> <span id="uptime">Loading...</span></p>
+                            <p><strong>DB Backups:</strong> <span id="lastBackup">Loading...</span> (<span id="backupCount">0</span> files)</p>
+                            <p><strong>MD Backups:</strong> <span id="lastMdBackup">Loading...</span> (<span id="mdBackupCount">0</span> files)</p>
+                            <p><strong>DB Path:</strong> <span id="dbPath">Loading...</span></p>
+                        </div>
+                        <div class="col-md-6">
+                            <canvas id="systemStatsChart"></canvas>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <h6>Last Backup</h6>
-                        <p class="mb-0">{{ system_info.last_backup or 'No backup recorded' }}</p>
-                    </div>
-                    <div class="mb-3">
-                        <h6>Database Location</h6>
-                        <p class="mb-0">{{ system_info.db_path }}</p>
+                    
+                    <!-- Add log viewer section -->
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6>Live Logs</h6>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-secondary active" onclick="showSystemLogs()">System</button>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="showSQLLogs()">SQL</button>
+                            </div>
+                        </div>
+                        <div class="log-container bg-dark text-light p-2" style="height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.85em;">
+                            <pre id="logViewer" class="mb-0"></pre>
+                            <pre id="sqlLogViewer" class="mb-0" style="display: none;"></pre>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -108,22 +128,68 @@ ORDER BY ds.date DESC;</pre>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Daily Log Section -->
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card">
+        <!-- Hyperlinks Card -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0">Daily Log</h5>
-                    <a href="{{ url_for('daily_logs', date=selected_date) }}" class="btn btn-sm btn-primary">View Full Log</a>
+                    <h5 class="card-title mb-0">Hyperlinks</h5>
+                    <button class="btn btn-sm btn-primary" onclick="addNewLink()">Add Link</button>
                 </div>
                 <div class="card-body">
-                    {% if daily_log %}
-                        {{ daily_log|safe }}
-                    {% else %}
-                        <p class="text-muted">No log entry for this date</p>
-                    {% endif %}
+                    <div id="linksList" class="list-group">
+                        {% for link in hyperlinks %}
+                        <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <a href="{{ link.url }}" target="_blank" class="text-decoration-none flex-grow-1">
+                                {{ link.title }}
+                                {% if link.description %}
+                                <small class="text-muted d-block">{{ link.description }}</small>
+                                {% endif %}
+                            </a>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-secondary" onclick="editLink('{{ link.id }}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteLink('{{ link.id }}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Link Edit Modal -->
+    <div class="modal fade" id="linkModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="linkModalLabel">Add/Edit Link</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="linkForm">
+                        <input type="hidden" id="linkId">
+                        <div class="mb-3">
+                            <label for="linkTitle" class="form-label">Title</label>
+                            <input type="text" class="form-control" id="linkTitle" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="linkUrl" class="form-label">URL</label>
+                            <input type="url" class="form-control" id="linkUrl" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="linkDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="linkDescription" rows="2"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveLink()">Save</button>
                 </div>
             </div>
         </div>
@@ -132,115 +198,242 @@ ORDER BY ds.date DESC;</pre>
 
 {% block scripts %}
 <script>
-let currentRange = 'day';
-
-function syncToNow() {
-    document.getElementById('selectedDate').value = new Date().toISOString().split('T')[0];
-    updateDashboard();
-}
-
-function updateDateRange() {
-    currentRange = document.getElementById('dateRange').value;
-    updateDashboard();
-}
-
-function navigateDate(direction) {
-    const dateInput = document.getElementById('selectedDate');
-    const currentDate = new Date(dateInput.value);
-    
-    switch(currentRange) {
-        case 'day':
-            currentDate.setDate(currentDate.getDate() + (direction === 'next' ? 1 : -1));
-            break;
-        case 'week':
-            currentDate.setDate(currentDate.getDate() + (direction === 'next' ? 7 : -7));
-            break;
-        case 'month':
-            currentDate.setMonth(currentDate.getMonth() + (direction === 'next' ? 1 : -1));
-            break;
-        case 'year':
-            currentDate.setFullYear(currentDate.getFullYear() + (direction === 'next' ? 1 : -1));
-            break;
-    }
-    
-    dateInput.value = currentDate.toISOString().split('T')[0];
-    updateDashboard();
-}
-
-function updateDashboard() {
-    const date = document.getElementById('selectedDate').value;
-    const range = document.getElementById('dateRange').value;
-    window.location.href = `/dashboard?date=${date}&range=${range}`;
-}
-
-// Initialize with current date if none selected
-if (!document.getElementById('selectedDate').value) {
-    syncToNow();
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    var ctx = document.getElementById('overviewChart').getContext('2d');
-    var overviewChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: {{ dates|default([])|tojson|safe }},
-            datasets: [
-                {
-                    label: 'Mood Level',
-                    data: {{ moods|default([])|tojson|safe }},
-                    borderColor: '#FF6384',
-                    fill: false
-                },
-                {
-                    label: 'Energy Level',
-                    data: {{ energies|default([])|tojson|safe }},
-                    borderColor: '#36A2EB',
-                    fill: false
-                },
-                {
-                    label: 'Sleep Quality',
-                    data: {{ sleep_quality|default([])|tojson|safe }},
-                    borderColor: '#FFCE56',
-                    fill: false
-                },
-                {
-                    label: 'Sleep Hours',
-                    data: {{ sleep_hours|default([])|tojson|safe }},
-                    borderColor: '#4BC0C0',
-                    fill: false
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                x: {
-                    type: 'time',
-                    time: {
-                        unit: 'day'
-                    }
-                },
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-});
-
 function updateSystemInfo() {
     fetch('/get_system_info')
         .then(response => response.json())
         .then(data => {
-            // Update system info elements
-            document.querySelector('.card-body p:first-child').textContent = data.db_size;
-            // Update other elements as needed
+            updateSystemMetricsDisplay(data);
+            // Update basic stats
+            const updateElementText = (id, value) => {
+                const element = document.getElementById(id);
+                if (element) element.textContent = value || 'N/A';
+            };
+            
+            // Update progress bars
+            const updateProgressBar = (id, percent) => {
+                const bar = document.getElementById(id);
+                if (bar) {
+                    bar.style.width = `${percent}%`;
+                    bar.setAttribute('aria-valuenow', percent);
+                }
+            };
+
+            // Update text elements
+            updateElementText('dbSize', data.dbSize);
+            updateElementText('memoryUsage', data.memory_usage);
+            updateElementText('cpuUsage', data.cpu_usage);
+            updateElementText('diskUsage', data.disk_usage);
+            updateElementText('uptime', data.uptime);
+            updateElementText('lastBackup', data.lastBackup);
+            updateElementText('lastMdBackup', data.lastMdBackup);
+            updateElementText('backupCount', data.backupCount);
+            updateElementText('mdBackupCount', data.mdBackupCount);
+            updateElementText('dbPath', data.dbPath);
+            
+            // Update progress bars
+            updateProgressBar('memoryBar', data.memory_percent);
+            updateProgressBar('cpuBar', parseFloat(data.cpu_usage));
+            updateProgressBar('diskBar', data.disk_percent);
+            
+            // Update live logs
+            const logViewer = document.getElementById('logViewer');
+            const sqlLogViewer = document.getElementById('sqlLogViewer');
+            
+            if (logViewer && data.recent_logs) {
+                const wasScrolledToBottom = logViewer.scrollHeight - logViewer.clientHeight <= logViewer.scrollTop + 1;
+                logViewer.innerHTML = data.recent_logs.join('\n');
+                if (wasScrolledToBottom) {
+                    logViewer.scrollTop = logViewer.scrollHeight;
+                }
+            }
+            
+            if (sqlLogViewer && data.sql_logs) {
+                const wasScrolledToBottom = sqlLogViewer.scrollHeight - sqlLogViewer.clientHeight <= sqlLogViewer.scrollTop + 1;
+                sqlLogViewer.innerHTML = data.sql_logs.join('\n');
+                if (wasScrolledToBottom) {
+                    sqlLogViewer.scrollTop = sqlLogViewer.scrollHeight;
+                }
+            }
+            
+            // Update system stats chart
+            updateSystemStatsChart({
+                memory: parseFloat(data.memory_percent || 0),
+                cpu: parseFloat(data.cpu_usage?.replace('%', '') || 0),
+                disk: parseFloat(data.disk_percent || 0)
+            });
+            
+            // Update DB size chart if history exists
+            if (data.db_size_history && Array.isArray(data.db_size_history)) {
+                updateDbSizeChart(data.db_size_history);
+            }
+            
+            // Update DB size history chart
+            updateDbSizeHistoryChart(data.dbSizeHistory);
         })
         .catch(error => console.error('Error updating system info:', error));
 }
 
-// Update system info every 30 seconds
-setInterval(updateSystemInfo, 30000);
+// Reduce update interval to prevent excessive CPU usage
+setInterval(updateSystemInfo, 2000);
+
+function updateSystemStatsChart(stats) {
+    const ctx = document.getElementById('systemStatsChart').getContext('2d');
+    if (!window.systemStatsChart) {
+        window.systemStatsChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Memory', 'CPU', 'Disk'],
+                datasets: [{
+                    label: 'System Usage (%)',
+                    data: [stats.memory, stats.cpu, stats.disk],
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.5)',
+                        'rgba(54, 162, 235, 0.5)',
+                        'rgba(255, 206, 86, 0.5)'
+                    ],
+                    borderColor: [
+                        'rgba(255, 99, 132, 1)',
+                        'rgba(54, 162, 235, 1)',
+                        'rgba(255, 206, 86, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Usage %'
+                        }
+                    }
+                },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'System Resource Usage'
+                    }
+                }
+            }
+        });
+    } else {
+        window.systemStatsChart.data.datasets[0].data = [
+            stats.memory,
+            stats.cpu,
+            stats.disk
+        ];
+        window.systemStatsChart.update();
+    }
+}
+
+function updateDbSizeChart(history) {
+    const ctx = document.getElementById('dbSizeChart').getContext('2d');
+    if (!window.dbSizeChart) {
+        window.dbSizeChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: history.map(h => new Date(h.timestamp * 1000).toLocaleDateString()),
+                datasets: [{
+                    label: 'Database Size',
+                    data: history.map(h => h.size),
+                    backgroundColor: 'rgba(75, 192, 192, 0.5)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Size (MB)'
+                        }
+                    }
+                },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Database Size History'
+                    }
+                }
+            }
+        });
+    } else {
+        window.dbSizeChart.data.labels = history.map(h => new Date(h.timestamp * 1000).toLocaleDateString());
+        window.dbSizeChart.data.datasets[0].data = history.map(h => h.size);
+        window.dbSizeChart.update();
+    }
+}
+
+function updateDbSizeHistoryChart(history) {
+    const ctx = document.getElementById('dbSizeHistoryChart').getContext('2d');
+    
+    if (!window.dbSizeHistoryChart) {
+        window.dbSizeHistoryChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Database Size (MB)',
+                    data: [],
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'hour',
+                            displayFormats: {
+                                hour: 'MMM D, HH:mm'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Size (MB)'
+                        }
+                    }
+                },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Database Size History'
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                    }
+                }
+            }
+        });
+    }
+    
+    const chartData = history.map(point => ({
+        x: point.timestamp * 1000, // Convert to milliseconds
+        y: point.size
+    }));
+    
+    window.dbSizeHistoryChart.data.datasets[0].data = chartData;
+    window.dbSizeHistoryChart.update();
+}
 
 function executeQuery() {
     const query = document.getElementById('sqlQuery').value;
@@ -303,6 +496,143 @@ function showExamples() {
 function setQuery(element) {
     const queryArea = document.getElementById('sqlQuery');
     queryArea.value = element.textContent;
+}
+
+// Add these new functions for hyperlink management
+function addNewLink() {
+    document.getElementById('linkId').value = '';
+    document.getElementById('linkTitle').value = '';
+    document.getElementById('linkUrl').value = '';
+    new bootstrap.Modal(document.getElementById('linkModal')).show();
+}
+
+function editLink(id) {
+    fetch(`/get_link/${id}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('linkId').value = data.id;
+            document.getElementById('linkTitle').value = data.title;
+            document.getElementById('linkUrl').value = data.url;
+            new bootstrap.Modal(document.getElementById('linkModal')).show();
+        });
+}
+
+function saveLink() {
+    const id = document.getElementById('linkId').value;
+    const title = document.getElementById('linkTitle').value;
+    const url = document.getElementById('linkUrl').value;
+    const description = document.getElementById('linkDescription').value;
+    
+    if (!title || !url) {
+        alert('Title and URL are required');
+        return;
+    }
+    
+    fetch('/save_link', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id, title, url, description })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            throw new Error(data.error || 'Unknown error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error saving link: ' + error.message);
+    });
+}
+
+function deleteLink(id) {
+    if (confirm('Are you sure you want to delete this link?')) {
+        fetch(`/delete_link/${id}`, { method: 'DELETE' })
+            .then(() => window.location.reload());
+    }
+}
+
+function updateSystemMetricsDisplay(data) {
+    // Helper function to update progress bar
+    function updateProgressBar(barId, value, text) {
+        const bar = document.getElementById(barId);
+        if (!bar) return;
+        
+        if (value === 'N/A' || isNaN(value)) {
+            bar.style.width = '0%';
+            bar.classList.add('bg-secondary');
+            bar.innerHTML = '<small>Not Available</small>';
+        } else {
+            bar.style.width = value + '%';
+            bar.classList.remove('bg-secondary');
+            bar.innerHTML = text || `${value}%`;
+            
+            // Update color based on value
+            bar.classList.remove('bg-success', 'bg-warning', 'bg-danger');
+            if (value < 60) bar.classList.add('bg-success');
+            else if (value < 85) bar.classList.add('bg-warning');
+            else bar.classList.add('bg-danger');
+        }
+    }
+
+    // Update memory usage
+    document.getElementById('memoryUsage').textContent = data.memory_usage;
+    updateProgressBar('memoryBar', data.memory_percent, `${data.memory_percent}%`);
+
+    // Update CPU usage
+    document.getElementById('cpuUsage').textContent = data.cpu_usage;
+    const cpuValue = parseFloat(data.cpu_usage);
+    updateProgressBar('cpuBar', isNaN(cpuValue) ? 'N/A' : cpuValue);
+
+    // Update disk usage
+    document.getElementById('diskUsage').textContent = data.disk_usage;
+    updateProgressBar('diskBar', data.disk_percent, `${data.disk_percent}%`);
+}
+
+// Add to existing DOMContentLoaded listener
+document.addEventListener('DOMContentLoaded', function() {
+    // ...existing code...
+    
+    // Update system metrics every 5 seconds
+    function updateSystemInfo() {
+        fetch('/get_system_info')
+            .then(response => response.json())
+            .then(data => {
+                updateSystemMetricsDisplay(data);
+                // ...rest of existing update code...
+            })
+            .catch(error => console.error('Error updating system info:', error));
+    }
+    
+    updateSystemInfo();
+    setInterval(updateSystemInfo, 5000);
+});
+
+function showSystemLogs() {
+    document.getElementById('logViewer').style.display = 'block';
+    document.getElementById('sqlLogViewer').style.display = 'none';
+    // Update button states
+    const [sysBtn, sqlBtn] = document.querySelectorAll('.btn-group .btn');
+    sysBtn.classList.add('active');
+    sqlBtn.classList.remove('active');
+}
+
+function showSQLLogs() {
+    document.getElementById('logViewer').style.display = 'none';
+    document.getElementById('sqlLogViewer').style.display = 'block';
+    // Update button states
+    const [sysBtn, sqlBtn] = document.querySelectorAll('.btn-group .btn');
+    sysBtn.classList.remove('active');
+    sqlBtn.classList.add('active');
 }
 </script>
 {% endblock %}

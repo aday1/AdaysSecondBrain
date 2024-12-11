@@ -5,7 +5,7 @@ from werkzeug.security import check_password_hash
 import os
 import json
 import sqlite3  # Add this line to import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import sys
 import argparse
 import markdown
@@ -13,6 +13,35 @@ import logging
 from time import strftime
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text  # Added import for text
+import time
+from collections import deque
+import threading
+from pathlib import Path
+import logging.handlers
+import platform
+import os.path
+import subprocess  # Add to imports at top
+
+app = Flask(__name__)
+
+# Add conditional import for psutil
+try:
+    import psutil
+    def verify_psutil():
+        """Verify psutil is working"""
+        try:
+            # Test basic functionality
+            psutil.cpu_percent()
+            psutil.virtual_memory()
+            return True
+        except Exception as e:
+            app.logger.error(f"Psutil verification failed: {str(e)}")
+            return False
+            
+    HAS_PSUTIL = verify_psutil()
+except ImportError:
+    HAS_PSUTIL = False
+    app.logger.warning("psutil not installed. System metrics will be limited.")
 
 conn = sqlite3.connect('pkm/db/pkm.db', timeout=10)  # Timeout in seconds
 
@@ -27,6 +56,23 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[logging.StreamHandler()]
 )
+
+# Global variables for system monitoring
+start_time = time.time()
+log_buffer = deque(maxlen=1000)  # Store last 1000 log lines
+db_size_history = deque(maxlen=30)  # Store 30 days of DB size history
+
+class MemoryLogHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            log_buffer.append(self.format(record))
+        except Exception:
+            pass
+
+# Configure logging
+log_formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+memory_handler = MemoryLogHandler()
+memory_handler.setFormatter(log_formatter)
 
 app = Flask(__name__, static_url_path='/static', static_folder='static')
 app.debug = True  # Enable debug mode
@@ -49,15 +95,70 @@ os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
 db = SQLAlchemy(app)
 
+# Add new SQLAlchemy model
+class Hyperlink(db.Model):
+    __tablename__ = 'hyperlinks'  # This was the issue - wrong table name
+    id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String(500), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+# Create tables after model definition
+with app.app_context():
+    db.create_all()
+
+# Add new logger class before app initialization
+class LiveLogger:
+    def __init__(self, max_entries=100):
+        self.logs = []
+        self.max_entries = max_entries
+        
+    def add_log(self, message, level='INFO'):
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        log_entry = f"{timestamp} [{level}] {message}"
+        self.logs.append(log_entry)
+        if len(self.logs) > self.max_entries:
+            self.logs.pop(0)
+        return log_entry
+
+# Initialize live logger after app creation
+live_logger = LiveLogger()
+
+# Add SQL logger class after LiveLogger
+class SQLLogger:
+    def __init__(self, max_entries=100):
+        self.logs = []
+        self.max_entries = max_entries
+        
+    def log_query(self, query, params=None):
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        if params:
+            log_entry = f"{timestamp} [SQL] {query} -- params: {params}"
+        else:
+            log_entry = f"{timestamp} [SQL] {query}"
+        self.logs.append(log_entry)
+        if len(self.logs) > self.max_entries:
+            self.logs.pop(0)
+        return log_entry
+
+# Initialize SQL logger after live_logger
+sql_logger = SQLLogger()
+
 # Add request logging
 @app.before_request
 def before_request():
+    if not request.path.startswith(('/static', '/get_system_info')):
+        live_logger.add_log(f"Request: {request.method} {request.path}")
     app.logger.debug(f'\nRequest: {request.method} {request.url}')
     app.logger.debug(f'Headers: {dict(request.headers)}')
     app.logger.debug(f'Body: {request.get_data().decode()}')
 
 @app.after_request
 def after_request(response):
+    if not request.path.startswith(('/static', '/get_system_info')):
+        status_code = response.status_code
+        live_logger.add_log(f"Response: {request.path} - Status: {status_code}")
     app.logger.debug(f'Response Status: {response.status}')
     app.logger.debug(f'Response Headers: {dict(response.headers)}')
     return response
@@ -104,12 +205,16 @@ def init_db():
         cursor = conn.cursor()
 
         try:
-            # Check if tables exist first
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
             existing_tables = {row[0] for row in cursor.fetchall()}
             
+            # Add hyperlinks to required tables
+            required_tables = {
+                'daily_metrics', 'work_logs', 'projects', 'habits', 
+                'goal_progress_history', 'hyperlinks'  # Added hyperlinks here
+            }
+            
             # Only initialize if key tables are missing
-            required_tables = {'daily_metrics', 'work_logs', 'projects', 'habits', 'goal_progress_history'}
             missing_tables = required_tables - existing_tables
             
             if missing_tables:
@@ -141,6 +246,19 @@ def init_db():
         finally:
             cursor.close()
             conn.close()
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS hyperlinks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+    except Exception as e:
+        app.logger.error(f"Error creating hyperlinks table: {str(e)}")
 
 # ...existing code...
 
@@ -278,15 +396,226 @@ def logout():
 def get_db_size():
     """Get the current size of the database file"""
     try:
-        size_bytes = os.path.getsize(db_path)
+        if os.path.exists(db_path):
+            size_bytes = os.path.getsize(db_path)
+            for unit in ['bytes', 'KB', 'MB', 'GB']:
+                if size_bytes < 1024:
+                    return f"{size_bytes:.1f} {unit}"
+                size_bytes /= 1024
+            return f"{size_bytes:.1f} TB"
+        return "Database not found"
+    except Exception as e:
+        app.logger.error(f"Error getting DB size: {str(e)}")
+        return "Error"
+
+def format_file_size(size_bytes):
+    """Format file size in bytes to human readable format"""
+    for unit in ['bytes', 'KB', 'MB', 'GB']:
         if size_bytes < 1024:
-            return f"{size_bytes} bytes"
-        elif size_bytes < 1024 * 1024:
-            return f"{size_bytes/1024:.1f} KB"
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024
+    return f"{size_bytes:.1f} TB"
+
+def get_last_backup():
+    """Get the timestamp of the last backup"""
+    try:
+        backup_dir = os.path.join(os.path.dirname(db_path), 'backups')
+        if not os.path.exists(backup_dir):
+            return "No backup directory found"
+            
+        backups = [f for f in os.listdir(backup_dir) if f.endswith('.db')]
+        if not backups:
+            return "No backups found"
+            
+        latest = max(backups, key=lambda f: os.path.getmtime(os.path.join(backup_dir, f)))
+        timestamp = os.path.getmtime(os.path.join(backup_dir, latest))
+        return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+    except Exception as e:
+        app.logger.error(f"Error checking backups: {str(e)}")
+        return "Error checking backups"
+
+def get_uptime():
+    """Calculate system uptime"""
+    uptime_seconds = time.time() - start_time
+    days = int(uptime_seconds / 86400)
+    hours = int((uptime_seconds % 86400) / 3600)
+    minutes = int((uptime_seconds % 3600) / 60)
+    seconds = int(uptime_seconds % 60)
+    return f"{days}d {hours}h {minutes}m {seconds}s"
+
+def get_backup_status():
+    """Get backup status for both directories"""
+    backup_info = {
+        'db': {'path': 'pkm/db/backups/', 'last_backup': None, 'count': 0},
+        'md': {'path': 'pkm/db/md_backups/', 'last_backup': None, 'count': 0}
+    }
+    
+    for key, info in backup_info.items():
+        try:
+            if os.path.exists(info['path']):
+                backups = [f for f in os.listdir(info['path']) if f.endswith('.db')]
+                info['count'] = len(backups)
+                if backups:
+                    latest = max(backups, key=lambda f: os.path.getmtime(os.path.join(info['path'], f)))
+                    timestamp = os.path.getmtime(os.path.join(info['path'], latest))
+                    info['last_backup'] = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+        except Exception as e:
+            app.logger.error(f"Error checking {key} backups: {str(e)}")
+            
+    return backup_info
+
+def get_system_metrics():
+    """Get system metrics using direct system commands when psutil is unavailable"""
+    metrics = {
+        'memory_usage': 'N/A',
+        'memory_percent': 0,
+        'cpu_percent': 'N/A',
+        'disk_usage': 'N/A',
+        'disk_percent': 0
+    }
+    
+    try:
+        if HAS_PSUTIL:
+            # Use psutil if available
+            vm = psutil.virtual_memory()
+            metrics['memory_usage'] = f"{vm.used / (1024**3):.1f}GB / {vm.total / (1024**3):.1f}GB"
+            metrics['memory_percent'] = vm.percent
+            metrics['cpu_percent'] = f"{psutil.cpu_percent(interval=None)}%"
+            disk = psutil.disk_usage(os.path.dirname(db_path))
+            metrics['disk_usage'] = f"{disk.used / (1024**3):.1f}GB / {disk.total / (1024**3):.1f}GB"
+            metrics['disk_percent'] = disk.percent
         else:
-            return f"{size_bytes/(1024*1024):.1f} MB"
-    except OSError:
-        return "Unknown"
+            # Fallback methods for Linux systems
+            try:
+                # Memory info from /proc/meminfo
+                with open('/proc/meminfo', 'r') as f:
+                    meminfo = {}
+                    for line in f:
+                        parts = line.split(':')
+                        if len(parts) == 2:
+                            key = parts[0].strip()
+                            value = parts[1].strip().split()[0]
+                            meminfo[key] = int(value)
+                    
+                    total = meminfo.get('MemTotal', 0) / 1024  # Convert to MB
+                    free = (meminfo.get('MemFree', 0) + 
+                           meminfo.get('Buffers', 0) + 
+                           meminfo.get('Cached', 0)) / 1024
+                    used = total - free
+                    mem_percent = (used / total * 100) if total > 0 else 0
+                    
+                    metrics['memory_usage'] = f"{used/1024:.1f}GB / {total/1024:.1f}GB"
+                    metrics['memory_percent'] = round(mem_percent, 1)
+            except:
+                pass
+
+            try:
+                # CPU usage from top command
+                top = subprocess.run(['top', '-bn1'], capture_output=True, text=True)
+                cpu_line = [l for l in top.stdout.split('\n') if 'Cpu(s)' in l][0]
+                idle = float(cpu_line.split('id,')[0].split(',')[-1].strip())
+                metrics['cpu_percent'] = f"{100 - idle:.1f}%"
+            except:
+                try:
+                    # Alternative using mpstat if available
+                    mpstat = subprocess.run(['mpstat', '1', '1'], capture_output=True, text=True)
+                    last_line = mpstat.stdout.strip().split('\n')[-1]
+                    idle = float(last_line.split()[-1])
+                    metrics['cpu_percent'] = f"{100 - idle:.1f}%"
+                except:
+                    pass
+
+            try:
+                # Disk usage from df command
+                df = subprocess.run(['df', os.path.dirname(db_path)], capture_output=True, text=True)
+                disk_info = df.stdout.strip().split('\n')[1].split()
+                total = int(disk_info[1]) * 1024  # Convert to bytes
+                used = int(disk_info[2]) * 1024
+                metrics['disk_usage'] = f"{used/1e9:.1f}GB / {total/1e9:.1f}GB"
+                metrics['disk_percent'] = int(disk_info[4].rstrip('%'))
+            except:
+                pass
+
+    except Exception as e:
+        app.logger.error(f"Error getting system metrics: {str(e)}")
+    
+    return metrics
+
+def get_db_size_stats():
+    """Get database size information and update history"""
+    try:
+        if not os.path.exists(db_path):
+            return {'current_size': 'N/A', 'size_percent': 0, 'history': []}
+            
+        size_bytes = os.path.getsize(db_path)
+        size_mb = size_bytes / (1024 * 1024)
+        
+        # Add new size point to history
+        timestamp = int(time.time())
+        db_size_history.append({
+            'timestamp': timestamp,
+            'size': round(size_mb, 2)
+        })
+        
+        # Keep only last 30 days of history
+        while len(db_size_history) > 720:  # 24 hours * 30 days
+            db_size_history.popleft()
+        
+        # Calculate size percent relative to configured limit (default 1GB)
+        size_limit_mb = 1024  # 1GB
+        size_percent = min((size_mb / size_limit_mb) * 100, 100)
+        
+        return {
+            'current_size': f"{size_mb:.2f} MB",
+            'size_percent': round(size_percent, 1),
+            'history': list(db_size_history)
+        }
+    except Exception as e:
+        app.logger.error(f"Error getting DB size: {str(e)}")
+        return {'current_size': 'Error', 'size_percent': 0, 'history': []}
+
+@app.route('/get_system_info')
+@login_required
+def get_system_info():
+    try:
+        metrics = get_system_metrics()
+        backup_status = get_backup_status()
+        db_stats = get_db_size_stats()
+        
+        system_info = {
+            'dbSize': db_stats['current_size'],
+            'dbSizePercent': db_stats['size_percent'],
+            'dbSizeHistory': db_stats['history'],
+            'lastBackup': backup_status['db'].get('last_backup', 'Never'),
+            'lastMdBackup': backup_status['md'].get('last_backup', 'Never'),
+            'backupCount': backup_status['db'].get('count', 0),
+            'mdBackupCount': backup_status['md'].get('count', 0),
+            'dbPath': db_path,
+            'uptime': get_uptime(),
+            'memory_usage': metrics['memory_usage'],
+            'memory_percent': metrics['memory_percent'],
+            'cpu_usage': metrics['cpu_percent'],
+            'disk_usage': metrics['disk_usage'],
+            'disk_percent': metrics['disk_percent'],
+            'os': platform.system(),
+            'python_version': platform.python_version(),
+            'recent_logs': live_logger.logs,
+            'sql_logs': sql_logger.logs  # Add SQL logs
+        }
+            
+        return jsonify(system_info)
+    except Exception as e:
+        app.logger.error(f"Error getting system info: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'dbSize': 'Error',
+            'memory_usage': 'Error',
+            'cpu_usage': 'Error',
+            'uptime': get_uptime(),
+            'lastBackup': 'Error',
+            'dbPath': db_path,
+            'recent_logs': []
+        }), 500
 
 def get_last_backup_time():
     """Get the timestamp of the last backup"""
@@ -301,14 +630,34 @@ def get_last_backup_time():
     except OSError:
         return None
 
-@app.route('/get_system_info')
-@login_required
-def get_system_info():
-    return jsonify({
-        'db_size': get_db_size(),
-        'last_backup': get_last_backup_time(),
-        'db_path': db_path
-    })
+def tail_log_file(n=100):
+    """Get the last n lines from the memory log buffer"""
+    return list(log_buffer)[-n:]
+
+def get_db_stats():
+    """Get database statistics including size history"""
+    try:
+        size_bytes = os.path.getsize(db_path)
+        size_mb = size_bytes / (1024 * 1024)
+        db_size_history.append({
+            'timestamp': time.time(),
+            'size': size_mb
+        })
+        return {
+            'current_size': f"{size_mb:.2f} MB",
+            'size_history': list(db_size_history)
+        }
+    except OSError:
+        return {
+            'current_size': "Unknown",
+            'size_history': []
+        }
+
+def get_recent_logs(n=100):
+    """Get the last n lines from the memory log buffer"""
+    return list(log_buffer)[-n:]
+
+# ...existing code...
 
 @app.route('/dashboard')
 @login_required
@@ -317,11 +666,21 @@ def dashboard():
     date_range = request.args.get('range', 'day')
     
     try:
+        # Get hyperlinks
+        conn = pkm.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, url, title, description FROM hyperlinks ORDER BY created_at DESC')
+        hyperlinks = [dict(zip(['id', 'url', 'title', 'description'], row)) for row in cursor.fetchall()]
+        conn.close()
+
         # Get daily log content
+        daily_log = None
         daily_log_path = os.path.join(pkm.daily_dir, f'{selected_date}.md')
         app.logger.debug(f"Looking for daily log at: {daily_log_path}")
-        daily_log = None
 
+        # Ensure daily logs directory exists
+        os.makedirs(pkm.daily_dir, exist_ok=True)
+        
         if os.path.exists(daily_log_path):
             try:
                 with open(daily_log_path, 'r', encoding='utf-8') as f:
@@ -333,19 +692,22 @@ def dashboard():
                 daily_log = f"<p class='text-danger'>Error reading log: {str(e)}</p>"
         else:
             app.logger.debug(f"No daily log found at {daily_log_path}")
+            daily_log = "<p class='text-muted'>No log entry for this date</p>"
 
         system_info = {
             'db_size': get_db_size(),
             'last_backup': get_last_backup_time(),
-            'db_path': db_path
+            'db_path': db_path,
+            'uptime': get_uptime(),
+            'recent_logs': get_recent_logs()
         }
         
         return render_template('dashboard.html', 
                              selected_date=selected_date,
                              date_range=date_range,
                              system_info=system_info,
-                             daily_log=daily_log)
-        
+                             daily_log=daily_log,
+                             hyperlinks=hyperlinks)
     except Exception as e:
         app.logger.error(f'Error loading dashboard: {str(e)}')
         flash('Error loading dashboard data')
@@ -353,7 +715,8 @@ def dashboard():
                              selected_date=selected_date,
                              date_range=date_range,
                              system_info={},
-                             daily_log=None)
+                             daily_log=None,
+                             hyperlinks=[])
 
 @app.route('/execute_sql', methods=['POST'])
 @login_required
@@ -365,6 +728,9 @@ def execute_sql():
 
         if not query.lower().startswith('select'):
             return jsonify({'error': 'Only SELECT queries are allowed'}), 400
+
+        # Log the query
+        sql_logger.log_query(query)
 
         conn = db.engine.raw_connection()
         cursor = conn.cursor()
@@ -2700,6 +3066,98 @@ def get_gratitude_stats():
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
+
+# Update get_link, save_link, and delete_link routes
+@app.route('/get_link/<int:id>')
+@login_required
+def get_link(id):
+    try:
+        link = Hyperlink.query.get(id)
+        if link:
+            return jsonify({
+                'id': link.id,
+                'url': link.url,
+                'title': link.title,
+                'description': link.description
+            })
+        return jsonify({'error': 'Link not found'}), 404
+    except Exception as e:
+        app.logger.error(f'Error getting link: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/save_link', methods=['POST'])
+@login_required
+def save_link():
+    try:
+        data = request.get_json()
+        if not data or not data.get('title') or not data.get('url'):
+            return jsonify({'error': 'Title and URL are required'}), 400
+
+        with app.app_context():
+            if data.get('id'):
+                # Update existing link
+                link = Hyperlink.query.get(data['id'])
+                if not link:
+                    return jsonify({'error': 'Link not found'}), 404
+                link.title = data['title']
+                link.url = data['url']
+                link.description = data.get('description', '')
+            else:
+                # Create new link
+                link = Hyperlink(
+                    title=data['title'],
+                    url=data['url'],
+                    description=data.get('description', '')
+                )
+                db.session.add(link)
+
+            db.session.commit()
+            
+            # Log the action
+            action = 'Updated' if data.get('id') else 'Added'
+            live_logger.add_log(f"{action} hyperlink: {link.title}")
+            
+            return jsonify({
+                'success': True,
+                'link': {
+                    'id': link.id,
+                    'url': link.url,
+                    'title': link.title,
+                    'description': link.description
+                }
+            })
+
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f'Error saving link: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/delete_link/<int:id>', methods=['DELETE'])
+@login_required
+def delete_link(id):
+    try:
+        link = Hyperlink.query.get(id)
+        if not link:
+            return jsonify({'error': 'Link not found'}), 404
+            
+        title = link.title
+        db.session.delete(link)
+        db.session.commit()
+        
+        live_logger.add_log(f"Deleted hyperlink: {title}")
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f'Error deleting link: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+# Add helper functions for system info
+def get_disk_usage():
+    try:
+        total, used, free = psutil.disk_usage(os.path.dirname(db_path))
+        return f"Free: {free / (1024**3):.1f}GB / Total: {total / (1024**3):.1f}GB"
+    except:
+        return "Unknown"
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PKM Web Interface')
