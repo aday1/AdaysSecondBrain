@@ -229,7 +229,7 @@ def init_db():
                     lines = []
                     for line in sql_script.splitlines():
                         clean_line = line.split('--')[0].strip()
-                        if clean_line:
+                        if (clean_line):
                             lines.append(clean_line)
                     cleaned_sql = '\n'.join(lines)
                     cleaned_sql = cleaned_sql.replace(';;', ';')
@@ -324,7 +324,7 @@ def get_mood_emoji(value):
     elif value <= 80:
         return '😊'
     else:
-        return '😄'
+        return '����'
 
 def get_energy_emoji(value):
     """Helper function to get energy emoji based on value (1-100)"""
@@ -3158,6 +3158,22 @@ def get_disk_usage():
         return f"Free: {free / (1024**3):.1f}GB / Total: {total / (1024**3):.1f}GB"
     except:
         return "Unknown"
+
+@app.route('/delete_daily_log/<date>', methods=['POST'])
+@login_required
+def delete_daily_log(date):
+    try:
+        file_path = os.path.join(pkm.daily_dir, f'{date}.md')
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            flash('Daily log deleted successfully')
+        else:
+            flash('Daily log not found')
+    except Exception as e:
+        flash(f'Error deleting log: {str(e)}')
+        app.logger.error(f'Error deleting log: {str(e)}')
+    
+    return redirect(url_for('daily_logs'))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PKM Web Interface')
