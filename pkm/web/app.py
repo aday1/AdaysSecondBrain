@@ -170,8 +170,19 @@ login_manager.login_view = 'login'
 class PKMManager:
     def __init__(self):
         self.db_path = db_path
-        self.daily_dir = os.path.join(os.path.dirname(__file__), 'daily_logs')  # Ensure this line is present
-        self.templates_dir = os.path.join(os.path.dirname(__file__), 'templates')  # Add this line
+        self.daily_dir = os.path.join(os.path.dirname(__file__), 'daily_logs')
+        # Fix template paths to look in parent pkm directory
+        self.templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'templates')
+        
+        # Create specific directories for different worksheet types
+        self.worksheets_dir = os.path.join(os.path.dirname(__file__), 'worksheets')
+        self.thought_diary_dir = os.path.join(self.worksheets_dir, 'thought_diaries')
+        self.field_notes_dir = os.path.join(self.worksheets_dir, 'field_notes')
+        
+        # Ensure all directories exist
+        for directory in [self.daily_dir, self.worksheets_dir, 
+                         self.thought_diary_dir, self.field_notes_dir]:
+            os.makedirs(directory, exist_ok=True)
 
     def get_db_connection(self):
         return db.engine.raw_connection()  # Changed to return raw DBAPI connection
@@ -235,30 +246,28 @@ def init_db():
                     cleaned_sql = cleaned_sql.replace(';;', ';')
                     
                     cursor.executescript(cleaned_sql)
-                    conn.commit()
-                    app.logger.info("Database tables created successfully")
             else:
                 app.logger.info("All required tables exist")
 
+            # Create hyperlinks table if it doesn't exist
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS hyperlinks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            conn.commit()
+            
         except Exception as e:
             app.logger.error(f"Error checking/initializing database: {str(e)}")
             raise e
         finally:
             cursor.close()
             conn.close()
-    try:
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS hyperlinks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                url TEXT NOT NULL,
-                title TEXT NOT NULL,
-                description TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        conn.commit()
-    except Exception as e:
-        app.logger.error(f"Error creating hyperlinks table: {str(e)}")
 
 # ...existing code...
 
@@ -301,6 +310,7 @@ def load_user(user_id):
 def format_date_filter(date):
     """Convert date to format with month name"""
     if isinstance(date, str):
+        date = date.replace('.md', '')  # Remove .md extension if present
         try:
             # Try parsing as date only
             date = datetime.strptime(date, '%Y-%m-%d')
@@ -344,6 +354,64 @@ def sum_filter(iterable, attribute=None):
     else:
         values = [x or 0 for x in iterable]
     return sum(float(v) for v in values)
+
+# ...existing code...
+
+@app.template_filter('format_day')
+def format_day_filter(date_str):
+    """Convert date string to day of the week"""
+    try:
+        date_obj = datetime.strptime(date_str, '%Y')
+        return date_obj.strftime('%A')
+    except ValueError:
+        return date_str
+
+@app.template_filter('format_human_friendly')
+def format_human_friendly_filter(date_str):
+    """Convert date string to human-friendly format"""
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m')
+        return date_obj.strftime('%Y-%B-%d (Week %U)')
+    except ValueError:
+        return date_str
+
+# ...existing code...
+
+@app.template_filter('format_year')
+def format_year_filter(date_str):
+    """Convert date string to year"""
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+        return date_obj.strftime('%Y')
+    except ValueError:
+        return date_str
+
+@app.template_filter('format_month')
+def format_month_filter(date_str):
+    """Convert date string to month and year"""
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+        return date_obj.strftime('%B %Y')
+    except ValueError:
+        return date_str
+
+@app.template_filter('format_day')
+def format_day_filter(date_str):
+    """Convert date string to day of the week"""
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+        return date_obj.strftime('%A')
+    except ValueError:
+        return date_str
+
+@app.template_filter('format_human_friendly')
+def format_human_friendly_filter(date_str):
+    """Convert date string to human-friendly format"""
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+        return date_obj.strftime('%B %d, %Y')
+    except ValueError:
+        return date_str
 
 # ...existing code...
 
@@ -681,7 +749,7 @@ def dashboard():
         # Ensure daily logs directory exists
         os.makedirs(pkm.daily_dir, exist_ok=True)
         
-        if os.path.exists(daily_log_path):
+        if (os.path.exists(daily_log_path)):
             try:
                 with open(daily_log_path, 'r', encoding='utf-8') as f:
                     content = f.read()
@@ -3067,104 +3135,168 @@ def get_gratitude_stats():
     finally:
         conn.close()
 
-# Update get_link, save_link, and delete_link routes
-@app.route('/get_link/<int:id>')
+# ...existing code...
+
+@app.route('/worksheets', methods=['GET', 'POST'])
 @login_required
-def get_link(id):
-    try:
-        link = Hyperlink.query.get(id)
-        if link:
-            return jsonify({
-                'id': link.id,
-                'url': link.url,
-                'title': link.title,
-                'description': link.description
-            })
-        return jsonify({'error': 'Link not found'}), 404
-    except Exception as e:
-        app.logger.error(f'Error getting link: {str(e)}')
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/save_link', methods=['POST'])
-@login_required
-def save_link():
-    try:
-        data = request.get_json()
-        if not data or not data.get('title') or not data.get('url'):
-            return jsonify({'error': 'Title and URL are required'}), 400
-
-        with app.app_context():
-            if data.get('id'):
-                # Update existing link
-                link = Hyperlink.query.get(data['id'])
-                if not link:
-                    return jsonify({'error': 'Link not found'}), 404
-                link.title = data['title']
-                link.url = data['url']
-                link.description = data.get('description', '')
-            else:
-                # Create new link
-                link = Hyperlink(
-                    title=data['title'],
-                    url=data['url'],
-                    description=data.get('description', '')
-                )
-                db.session.add(link)
-
-            db.session.commit()
-            
-            # Log the action
-            action = 'Updated' if data.get('id') else 'Added'
-            live_logger.add_log(f"{action} hyperlink: {link.title}")
-            
-            return jsonify({
-                'success': True,
-                'link': {
-                    'id': link.id,
-                    'url': link.url,
-                    'title': link.title,
-                    'description': link.description
-                }
-            })
-
-    except Exception as e:
-        db.session.rollback()
-        app.logger.error(f'Error saving link: {str(e)}')
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/delete_link/<int:id>', methods=['DELETE'])
-@login_required
-def delete_link(id):
-    try:
-        link = Hyperlink.query.get(id)
-        if not link:
-            return jsonify({'error': 'Link not found'}), 404
-            
-        title = link.title
-        db.session.delete(link)
-        db.session.commit()
+def worksheets():
+    selected_date = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    search_query = request.args.get('search', '')
+    worksheets = []
+    
+    if request.method == 'POST':
+        custom_date = request.form.get('custom_date', datetime.now().strftime('%Y-%m-%d'))
+        template_type = request.form.get('template_type', 'thought_diary')
         
-        live_logger.add_log(f"Deleted hyperlink: {title}")
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        app.logger.error(f'Error deleting link: {str(e)}')
-        return jsonify({'error': str(e)}), 500
+        template_map = {
+            'thought_diary': 'thought_diary_template.md',
+            'field_note': 'field_note_template.md'
+        }
+        
+        directory_map = {
+            'thought_diary': pkm.thought_diary_dir,
+            'field_note': pkm.field_notes_dir
+        }
+        
+        template_name = template_map.get(template_type)
+        target_dir = directory_map.get(template_type)
+        
+        if not template_name or not target_dir:
+            flash('Invalid template type')
+            return redirect(url_for('worksheets'))
+            
+        # Generate unique filename
+        timestamp = datetime.now().strftime('%H%M%S')
+        filename = f'{custom_date}_{template_type}_{timestamp}.md'
+        file_path = os.path.join(target_dir, filename)
+        
+        try:
+            template_path = os.path.join(pkm.templates_dir, template_name)
+            with open(template_path, 'r') as f:
+                template_content = f.read()
+                
+            content = template_content.replace('{{date}}', custom_date)
+            
+            with open(file_path, 'w') as f:
+                f.write(content)
+                
+            flash(f'Created new {template_type.replace("_", " ")}')
+            return redirect(url_for('worksheets'))
+            
+        except Exception as e:
+            flash(f'Error creating worksheet: {str(e)}')
+            return redirect(url_for('worksheets'))
 
-# Add helper functions for system info
-def get_disk_usage():
+    # Get all worksheets from both directories
     try:
-        total, used, free = psutil.disk_usage(os.path.dirname(db_path))
-        return f"Free: {free / (1024**3):.1f}GB / Total: {total / (1024**3):.1f}GB"
-    except:
-        return "Unknown"
+        base_path = os.path.join(os.path.dirname(__file__), 'worksheets')
+        
+        # Get thought diaries
+        thought_diary_path = os.path.join(base_path, 'thought_diaries')
+        if os.path.exists(thought_diary_path):
+            for file in os.listdir(thought_diary_path):
+                if file.endswith('.md'):
+                    with open(os.path.join(thought_diary_path, file), 'r') as f:
+                        content = f.read()
+                        date = file.split('_')[0]
+                        worksheets.append({
+                            'filename': file,
+                            'date': date,
+                            'title': content.split('\n')[0].replace('# ', ''),
+                            'content': convert_markdown_links(markdown.markdown(content)),
+                            'raw_content': content,
+                            'type': 'thought_diary',
+                            'is_active': False
+                        })
+
+        # Get field notes
+        field_notes_path = os.path.join(base_path, 'field_notes')
+        if os.path.exists(field_notes_path):
+            for file in os.listdir(field_notes_path):
+                if file.endswith('.md'):
+                    with open(os.path.join(field_notes_path, file), 'r') as f:
+                        content = f.read()
+                        date = file.split('_')[0]
+                        worksheets.append({
+                            'filename': file,
+                            'date': date,
+                            'title': content.split('\n')[0].replace('# ', ''),
+                            'content': convert_markdown_links(markdown.markdown(content)),
+                            'raw_content': content,
+                            'type': 'field_note',
+                            'is_active': False
+                        })
+
+        # Sort worksheets by date
+        worksheets.sort(key=lambda x: x['date'], reverse=True)
+        app.logger.debug(f"Found {len(worksheets)} worksheets")
+
+        # Filter worksheets by search query
+        if search_query:
+            worksheets = [ws for ws in worksheets if search_query.lower() in ws['title'].lower() or search_query.lower() in ws['raw_content'].lower()]
+
+    except Exception as e:
+        app.logger.error(f'Error loading worksheets: {str(e)}')
+        flash(f'Error loading worksheets: {str(e)}')
+
+    return render_template('worksheets.html', 
+                         worksheets=worksheets, 
+                         selected_date=selected_date)
+
+@app.route('/update_worksheet/<path:filename>', methods=['POST'])
+@login_required
+def update_worksheet(filename):
+    try:
+        content = request.form.get('content')
+        worksheet_type = filename.split('_')[1]  # Extract type from filename
+        
+        if 'thought_diary' in worksheet_type:
+            target_dir = pkm.thought_diary_dir
+        else:
+            target_dir = pkm.field_notes_dir
+            
+        file_path = os.path.join(target_dir, filename)
+        
+        with open(file_path, 'w') as f:
+            f.write(content)
+            
+        flash('Worksheet updated successfully')
+    except Exception as e:
+        flash(f'Error updating worksheet: {str(e)}')
+        app.logger.error(f'Error updating worksheet: {str(e)}')
+    
+    return redirect(url_for('worksheets'))
+
+@app.route('/delete_worksheet/<path:filename>', methods=['POST'])
+@login_required
+def delete_worksheet(filename):
+    try:
+        worksheet_type = filename.split('_')[1]  # Extract type from filename
+        
+        if worksheet_type == 'thought_diary':
+            target_dir = pkm.thought_diary_dir
+        else:
+            target_dir = pkm.field_notes_dir
+            
+        file_path = os.path.join(target_dir, filename)
+        
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            flash('Worksheet deleted successfully')
+        else:
+            flash('Worksheet not found')
+    except Exception as e:
+        flash(f'Error deleting worksheet: {str(e)}')
+        app.logger.error(f'Error deleting worksheet: {str(e)}')
+    
+    return redirect(url_for('worksheets'))
 
 @app.route('/delete_daily_log/<date>', methods=['POST'])
 @login_required
 def delete_daily_log(date):
     try:
         file_path = os.path.join(pkm.daily_dir, f'{date}.md')
-        if os.path.exists(file_path):
+        if (os.path.exists(file_path)):
             os.remove(file_path)
             flash('Daily log deleted successfully')
         else:
@@ -3174,6 +3306,23 @@ def delete_daily_log(date):
         app.logger.error(f'Error deleting log: {str(e)}')
     
     return redirect(url_for('daily_logs'))
+
+# ...existing code...
+
+def convert_markdown_links(content):
+    """Convert markdown links to HTML links for internal markdown files."""
+    import re
+    pattern = re.compile(r'\[\[([^\]]+)\]\]')
+    base_url = url_for('worksheets', _external=True)
+    
+    def replace_link(match):
+        link_text = match.group(1)
+        link_url = f"{base_url}?search={link_text}"
+        return f'<a href="{link_url}">{link_text}</a>'
+    
+    return pattern.sub(replace_link, content)
+
+# ...existing code...
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PKM Web Interface')
